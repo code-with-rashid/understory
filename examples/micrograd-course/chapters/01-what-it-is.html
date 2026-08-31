@@ -1,0 +1,179 @@
+<section class="chapter" id="ch-1" data-u-short="What it is">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 01</span>
+      <h1 class="chapter__title">The hundred lines that learn</h1>
+      <p class="chapter__lede">What micrograd is, and what happens in the instant you write <code>a + b</code>.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">What this thing is</h2>
+        <p>micrograd is a miniature version of the machinery inside PyTorch — the software that trains almost every <button class="gloss" type="button" popovertarget="g-neural-network">neural network</button><span class="gloss-def" popover id="g-neural-network">A stack of simple arithmetic operations whose numbers get nudged, over and over, until the stack produces useful answers. Not a brain — a very large dial-tuning machine.</span> you have used. It fits in about 150 lines of Python.</p>
+        <p>It exists to answer one question, millions of times a second: <em>which dial should I turn, and which way, to make this answer less wrong?</em></p>
+      </section>
+
+      <div class="rows u-reveal">
+        <div class="row"><span class="row__glyph" aria-hidden="true">🧮</span><div><strong>engine.py — about 100 lines</strong><p>One class called Value: a single number that remembers where it came from</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">🕸️</span><div><strong>nn.py — about 60 lines</strong><p>Neuron, Layer and MLP — a whole neural network built out of nothing but Values</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">📓</span><div><strong>demo.ipynb</strong><p>A worked example that teaches the network to separate two interleaving spirals of dots</p></div></div>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A trail of breadcrumbs</h2>
+        <p>In ordinary Python, <code>4 + 2</code> gives you <code>6</code>, and the 4 and the 2 are gone. The answer has no memory of its parents.</p>
+        <p>micrograd refuses to forget. Every result keeps a pointer back to the numbers that made it — breadcrumbs dropped on the way out, so the trail can be walked backwards later.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 13-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__add__</span>(self, other):</span>
+<span class="cl">        other = other <span class="t-key">if</span> <span class="t-fn">isinstance</span>(other, Value) <span class="t-key">else</span> <span class="t-fn">Value</span>(other)</span>
+<span class="cl">        out = <span class="t-fn">Value</span>(self.data + other.data, (self, other), <span class="t-str">'+'</span>)</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">def</span> <span class="t-fn">_backward</span>():</span>
+<span class="cl">            self.grad += out.grad</span>
+<span class="cl">            other.grad += out.grad</span>
+<span class="cl">        out._backward = _backward</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">return</span> out</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>This runs every time you write <code>a + b</code> and <code>a</code> is one of micrograd's numbers.</li>
+            <li>If you added a plain <code>2</code>, quietly wrap it first, so everything downstream can assume it is dealing with the same kind of thing.</li>
+            <li>Make the answer — and notice it stores three things, not one: the sum, <em>who its two parents were</em>, and the label <code>'+'</code>.</li>
+            <li>Now write the note-to-self: when someone eventually tells me how much I mattered, here is how I pass that message back to my parents.</li>
+            <li>For addition the answer is beautifully lazy. Nudge the sum up by one and each input contributed exactly one, so both parents get the message unchanged.</li>
+            <li>Staple that note to the answer and hand it back.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">A function that outlives the one that made it</strong>
+          <p>A function defined inside another function, still alive after the outer one has finished, is called a <button class="gloss" type="button" popovertarget="g-closure">closure</button><span class="gloss-def" popover id="g-closure">A function that remembers the variables that surrounded it when it was created, even after that surrounding code has finished. Here, <b>_backward</b> still remembers self, other and out long after __add__ returned.</span>. It is what lets a result carry its own instructions for undoing itself.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"a","say":"You write d = a * b + c. Python evaluates the multiplication first."},
+        {"at":"mul","from":"a","to":"mul","say":"a and b meet in __mul__, and a new number appears holding 8.0."},
+        {"at":"mul","say":"That new number is labelled * and remembers a and b as its parents."},
+        {"at":"add","from":"mul","to":"add","say":"Now the addition runs: the temporary node meets c."},
+        {"at":"d","from":"add","to":"d","say":"d is born holding 18.0, labelled +, with the whole family tree hanging beneath it."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>Value(4.0)</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>a * b = 8.0</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d = 18.0</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Step through what Python builds when you write one short line.">Step through what Python builds when you write one short line.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>Python evaluates <code>a * b</code> first, making a new number that remembers a and b.</li>
+          <li>That temporary number is then added to c, making a third number.</li>
+          <li><code>d</code> holds 18.0 and the entire family tree hangs beneath it.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <p>That family tree has a name engineers use constantly: a <button class="gloss" type="button" popovertarget="g-dag">DAG</button><span class="gloss-def" popover id="g-dag">Directed acyclic graph: a set of things joined by one-way arrows, with no way to loop back to where you started. A family tree is one; a circular argument is not.</span>. Saying "micrograd builds a DAG of scalar operations" to an assistant gets you a far more precise answer than "it does the maths thing".</p>
+      </section>
+
+      <div class="territory u-reveal">
+        <div class="territory__head">
+          <h3 class="territory__title">The whole territory, honestly</h3>
+          <p class="territory__note">Small enough to map completely: two files walked here, two routed.</p>
+        </div>
+        <div class="territory__rows">
+          <div class="territory__row"><span class="territory__name">engine.py · 94 lines</span><span class="territory__what">The Value class — every idea in chapters one and four</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">nn.py · 60 lines</span><span class="territory__what">Neuron, Layer, MLP — chapters two and three</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">test_engine.py</span><span class="territory__what">Proves correctness by cross-checking against PyTorch</span><span class="territory__status territory__status--next">fieldwork, ch. 5</span></div>
+          <div class="territory__row"><span class="territory__name">demo.ipynb</span><span class="territory__what">Trains a real classifier on two spirals of dots</span><span class="territory__status territory__status--later">on your own</span></div>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Scalars, not tensors — every number is its own object</h3>
+          <span class="tradeoff__src">README.md — "The DAG only operates over scalar values… potentially useful for educational purposes"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>One Value per number; a neuron becomes visible adds and multiplies.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>Tensors — whole grids of numbers moved at once, the way every production framework works.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Speed, catastrophically — an object and two closures per operation.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never — the README says educational. When speed matters, the answer is PyTorch.</p></div>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The wrapping trick has a mirror image: it also works when the plain number comes <em>first</em>.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Write <code>2 * x</code> and Python asks the number 2 to multiply first — and 2 has never heard of Value. Python then tries the reflected version, <code>__rmul__</code>, on <code>x</code>, and engine.py defines the full set: <code>__radd__</code>, <code>__rsub__</code>, <code>__rmul__</code>, <code>__rtruediv__</code>. Each just flips the operands and reuses the normal path, so both orderings build the same graph.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A performance-minded engineer</p>
+        <blockquote class="defend__q">An object allocation and two closures for every single addition? This is the least efficient arithmetic ever written. Why would anyone study code that no one would ever ship?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Because the inefficiency is the pedagogy. PyTorch does conceptually identical bookkeeping — a graph of operations, each remembering its inputs and how to push gradients back — but buried in C++ and batched over tensors, where no one can watch it happen. micrograd unrolls the same machine into 94 readable lines. You study it precisely because it makes the invisible thing visible; you ship the other one.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it could be optimised later". The follow-up is <em>then why hasn't anyone?</em> — the honest position is that its slowness is a deliberate, stated trade for legibility, not a gap waiting for a patch.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The link back to the parents is the entire product. Without it there is a number, but no way to work out what to change."
+             data-u-if-wrong="Plain Python already computes the same number, and faster. So whatever makes micrograd special, it is not the arithmetic.">
+          <h3 class="check__ask">You ask an assistant to speed micrograd up by storing only the numbers and dropping the references to their parents. What breaks?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — same answers, less memory</button>
+            <button class="check__opt" type="button" data-u-answer="b">Learning breaks: with no trail back to the inputs, nothing can work out which dial to turn</button>
+            <button class="check__opt" type="button" data-u-answer="c">Addition breaks but multiplication keeps working</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Every operation in engine.py opens with that same defensive line, which is why mixing plain numbers and Values just works."
+             data-u-if-wrong="Look again at the second line of __add__ — it deals with this case before any arithmetic happens.">
+          <h3 class="check__ask">Your code does <code>x + 1</code>, where <code>x</code> is a Value and <code>1</code> is an ordinary number. What happens?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It fails — you can only add a Value to a Value</button>
+            <button class="check__opt" type="button" data-u-answer="b">The 1 is ignored and you get x back</button>
+            <button class="check__opt" type="button" data-u-answer="c">The 1 is wrapped into a Value automatically, then the normal addition runs</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{SUBTITLE}}">
+<link rel="stylesheet" href="course.css">
+<style>
+  :root {
+    --accent:        {{ACCENT}};
+    --accent-strong: {{ACCENT_STRONG}};
+    --accent-wash:   {{ACCENT_WASH}};
+    --accent-quiet:  {{ACCENT_QUIET}};
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent:        {{ACCENT_DARK}};
+      --accent-strong: {{ACCENT_QUIET_DARK}};
+      --accent-wash:   {{ACCENT_WASH_DARK}};
+      --accent-quiet:  {{ACCENT_QUIET_DARK}};
+      --accent-ink:    #0F1115;
+    }
+  }
+</style>
+<script src="course.js" defer></script>
+</head>
+<body>
+
+<div class="u-progress" data-u="progress" role="progressbar" aria-label="Reading progress"></div>
+
+<nav class="u-rail" data-u="rail" aria-label="Chapters">
+  <span class="u-rail__title">{{TITLE}}</span>
+  <ul class="u-rail__list">
+{{RAIL}}
+  </ul>
+</nav>
+
+<main class="u-main">
+{{CHAPTERS}}
+
+<footer class="u-colophon">{{COLOPHON}}</footer>
+</main>
+
+</body>
+</html>

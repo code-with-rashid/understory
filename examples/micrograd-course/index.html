@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How micrograd Works</title>
+<meta name="description" content="A hundred and fifty lines of Python that learn">
+<link rel="stylesheet" href="course.css">
+<style>
+  :root {
+    --accent:        #0F6F76;
+    --accent-strong: #0A565C;
+    --accent-wash:   #E4F1F1;
+    --accent-quiet:  #7FB3B6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent:        #238D95;
+      --accent-strong: #41A3AA;
+      --accent-wash:   #10262A;
+      --accent-quiet:  #41A3AA;
+      --accent-ink:    #0F1115;
+    }
+  }
+</style>
+<script src="course.js" defer></script>
+</head>
+<body>
+
+<div class="u-progress" data-u="progress" role="progressbar" aria-label="Reading progress"></div>
+
+<nav class="u-rail" data-u="rail" aria-label="Chapters">
+  <span class="u-rail__title">How micrograd Works</span>
+  <ul class="u-rail__list">
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-1" aria-current="false"><span class="u-rail__num">01</span><span class="u-rail__label">What it is</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-2" aria-current="false"><span class="u-rail__num">02</span><span class="u-rail__label">The cast</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-3" aria-current="false"><span class="u-rail__num">03</span><span class="u-rail__label">Forward pass</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-4" aria-current="false"><span class="u-rail__num">04</span><span class="u-rail__label">Backpropagation</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-5" aria-current="false"><span class="u-rail__num">05</span><span class="u-rail__label">When it breaks</span></button></li>
+  </ul>
+</nav>
+
+<main class="u-main">
+<section class="chapter" id="ch-1" data-u-short="What it is">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 01</span>
+      <h1 class="chapter__title">The hundred lines that learn</h1>
+      <p class="chapter__lede">What micrograd is, and what happens in the instant you write <code>a + b</code>.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">What this thing is</h2>
+        <p>micrograd is a miniature version of the machinery inside PyTorch — the software that trains almost every <button class="gloss" type="button" popovertarget="g-neural-network">neural network</button><span class="gloss-def" popover id="g-neural-network">A stack of simple arithmetic operations whose numbers get nudged, over and over, until the stack produces useful answers. Not a brain — a very large dial-tuning machine.</span> you have used. It fits in about 150 lines of Python.</p>
+        <p>It exists to answer one question, millions of times a second: <em>which dial should I turn, and which way, to make this answer less wrong?</em></p>
+      </section>
+
+      <div class="rows u-reveal">
+        <div class="row"><span class="row__glyph" aria-hidden="true">🧮</span><div><strong>engine.py — about 100 lines</strong><p>One class called Value: a single number that remembers where it came from</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">🕸️</span><div><strong>nn.py — about 60 lines</strong><p>Neuron, Layer and MLP — a whole neural network built out of nothing but Values</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">📓</span><div><strong>demo.ipynb</strong><p>A worked example that teaches the network to separate two interleaving spirals of dots</p></div></div>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A trail of breadcrumbs</h2>
+        <p>In ordinary Python, <code>4 + 2</code> gives you <code>6</code>, and the 4 and the 2 are gone. The answer has no memory of its parents.</p>
+        <p>micrograd refuses to forget. Every result keeps a pointer back to the numbers that made it — breadcrumbs dropped on the way out, so the trail can be walked backwards later.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 13-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__add__</span>(self, other):</span>
+<span class="cl">        other = other <span class="t-key">if</span> <span class="t-fn">isinstance</span>(other, Value) <span class="t-key">else</span> <span class="t-fn">Value</span>(other)</span>
+<span class="cl">        out = <span class="t-fn">Value</span>(self.data + other.data, (self, other), <span class="t-str">'+'</span>)</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">def</span> <span class="t-fn">_backward</span>():</span>
+<span class="cl">            self.grad += out.grad</span>
+<span class="cl">            other.grad += out.grad</span>
+<span class="cl">        out._backward = _backward</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">return</span> out</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>This runs every time you write <code>a + b</code> and <code>a</code> is one of micrograd's numbers.</li>
+            <li>If you added a plain <code>2</code>, quietly wrap it first, so everything downstream can assume it is dealing with the same kind of thing.</li>
+            <li>Make the answer — and notice it stores three things, not one: the sum, <em>who its two parents were</em>, and the label <code>'+'</code>.</li>
+            <li>Now write the note-to-self: when someone eventually tells me how much I mattered, here is how I pass that message back to my parents.</li>
+            <li>For addition the answer is beautifully lazy. Nudge the sum up by one and each input contributed exactly one, so both parents get the message unchanged.</li>
+            <li>Staple that note to the answer and hand it back.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">A function that outlives the one that made it</strong>
+          <p>A function defined inside another function, still alive after the outer one has finished, is called a <button class="gloss" type="button" popovertarget="g-closure">closure</button><span class="gloss-def" popover id="g-closure">A function that remembers the variables that surrounded it when it was created, even after that surrounding code has finished. Here, <b>_backward</b> still remembers self, other and out long after __add__ returned.</span>. It is what lets a result carry its own instructions for undoing itself.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"a","say":"You write d = a * b + c. Python evaluates the multiplication first."},
+        {"at":"mul","from":"a","to":"mul","say":"a and b meet in __mul__, and a new number appears holding 8.0."},
+        {"at":"mul","say":"That new number is labelled * and remembers a and b as its parents."},
+        {"at":"add","from":"mul","to":"add","say":"Now the addition runs: the temporary node meets c."},
+        {"at":"d","from":"add","to":"d","say":"d is born holding 18.0, labelled +, with the whole family tree hanging beneath it."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>Value(4.0)</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>a * b = 8.0</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d = 18.0</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Step through what Python builds when you write one short line.">Step through what Python builds when you write one short line.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>Python evaluates <code>a * b</code> first, making a new number that remembers a and b.</li>
+          <li>That temporary number is then added to c, making a third number.</li>
+          <li><code>d</code> holds 18.0 and the entire family tree hangs beneath it.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <p>That family tree has a name engineers use constantly: a <button class="gloss" type="button" popovertarget="g-dag">DAG</button><span class="gloss-def" popover id="g-dag">Directed acyclic graph: a set of things joined by one-way arrows, with no way to loop back to where you started. A family tree is one; a circular argument is not.</span>. Saying "micrograd builds a DAG of scalar operations" to an assistant gets you a far more precise answer than "it does the maths thing".</p>
+      </section>
+
+      <div class="territory u-reveal">
+        <div class="territory__head">
+          <h3 class="territory__title">The whole territory, honestly</h3>
+          <p class="territory__note">Small enough to map completely: two files walked here, two routed.</p>
+        </div>
+        <div class="territory__rows">
+          <div class="territory__row"><span class="territory__name">engine.py · 94 lines</span><span class="territory__what">The Value class — every idea in chapters one and four</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">nn.py · 60 lines</span><span class="territory__what">Neuron, Layer, MLP — chapters two and three</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">test_engine.py</span><span class="territory__what">Proves correctness by cross-checking against PyTorch</span><span class="territory__status territory__status--next">fieldwork, ch. 5</span></div>
+          <div class="territory__row"><span class="territory__name">demo.ipynb</span><span class="territory__what">Trains a real classifier on two spirals of dots</span><span class="territory__status territory__status--later">on your own</span></div>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Scalars, not tensors — every number is its own object</h3>
+          <span class="tradeoff__src">README.md — "The DAG only operates over scalar values… potentially useful for educational purposes"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>One Value per number; a neuron becomes visible adds and multiplies.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>Tensors — whole grids of numbers moved at once, the way every production framework works.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Speed, catastrophically — an object and two closures per operation.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never — the README says educational. When speed matters, the answer is PyTorch.</p></div>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The wrapping trick has a mirror image: it also works when the plain number comes <em>first</em>.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Write <code>2 * x</code> and Python asks the number 2 to multiply first — and 2 has never heard of Value. Python then tries the reflected version, <code>__rmul__</code>, on <code>x</code>, and engine.py defines the full set: <code>__radd__</code>, <code>__rsub__</code>, <code>__rmul__</code>, <code>__rtruediv__</code>. Each just flips the operands and reuses the normal path, so both orderings build the same graph.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A performance-minded engineer</p>
+        <blockquote class="defend__q">An object allocation and two closures for every single addition? This is the least efficient arithmetic ever written. Why would anyone study code that no one would ever ship?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Because the inefficiency is the pedagogy. PyTorch does conceptually identical bookkeeping — a graph of operations, each remembering its inputs and how to push gradients back — but buried in C++ and batched over tensors, where no one can watch it happen. micrograd unrolls the same machine into 94 readable lines. You study it precisely because it makes the invisible thing visible; you ship the other one.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it could be optimised later". The follow-up is <em>then why hasn't anyone?</em> — the honest position is that its slowness is a deliberate, stated trade for legibility, not a gap waiting for a patch.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The link back to the parents is the entire product. Without it there is a number, but no way to work out what to change."
+             data-u-if-wrong="Plain Python already computes the same number, and faster. So whatever makes micrograd special, it is not the arithmetic.">
+          <h3 class="check__ask">You ask an assistant to speed micrograd up by storing only the numbers and dropping the references to their parents. What breaks?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — same answers, less memory</button>
+            <button class="check__opt" type="button" data-u-answer="b">Learning breaks: with no trail back to the inputs, nothing can work out which dial to turn</button>
+            <button class="check__opt" type="button" data-u-answer="c">Addition breaks but multiplication keeps working</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Every operation in engine.py opens with that same defensive line, which is why mixing plain numbers and Values just works."
+             data-u-if-wrong="Look again at the second line of __add__ — it deals with this case before any arithmetic happens.">
+          <h3 class="check__ask">Your code does <code>x + 1</code>, where <code>x</code> is a Value and <code>1</code> is an ordinary number. What happens?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It fails — you can only add a Value to a Value</button>
+            <button class="check__opt" type="button" data-u-answer="b">The 1 is ignored and you get x back</button>
+            <button class="check__opt" type="button" data-u-answer="c">The 1 is wrapped into a Value automatically, then the normal addition runs</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-2" data-u-short="The cast">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 02</span>
+      <h1 class="chapter__title">Meet the cast</h1>
+      <p class="chapter__lede">Four characters, each one built out of the one below it.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Nesting dolls, not an org chart</h2>
+        <p>In most software the parts sit beside each other and send messages. Here they sit <em>inside</em> each other, like nesting dolls.</p>
+        <p>Open the network and you find layers. Open a layer and you find neurons. Open a neuron and it is Values all the way down.</p>
+      </section>
+
+      <div class="map u-reveal" data-u="map">
+        <div class="map__zone">
+          <span class="map__zone-name">nn.py — the network</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="MLP: the whole network. Holds a list of layers and pushes your input through each one in turn. This is the object you actually call."><span class="map__glyph" aria-hidden="true">🧠</span><span>MLP</span></button>
+            <button class="map__part" type="button" data-u-part="Layer: a row of neurons that all read the same input. Its only job is to call each neuron and collect the answers."><span class="map__glyph" aria-hidden="true">📚</span><span>Layer</span></button>
+            <button class="map__part" type="button" data-u-part="Neuron: holds one weight per input, plus a bias. Multiplies, sums, and optionally flattens the negative half away."><span class="map__glyph" aria-hidden="true">⚫</span><span>Neuron</span></button>
+          </div>
+        </div>
+        <div class="map__zone">
+          <span class="map__zone-name">engine.py — the arithmetic</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="Value: one number, its gradient, its parents, and the note explaining how to pass credit back to those parents. Everything above is made of these."><span class="map__glyph" aria-hidden="true">🔢</span><span>Value</span></button>
+            <button class="map__part" type="button" data-u-part="Module: a two-method base class. It gives the other three a shared list of parameters and a way to wipe every gradient back to zero."><span class="map__glyph" aria-hidden="true">🧩</span><span>Module</span></button>
+          </div>
+        </div>
+        <p class="map__readout" data-u-readout role="status" aria-live="polite">Pick a piece to see what it is responsible for.</p>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One neuron, in full</h2>
+        <p>A neuron sounds mystical. It is four lines of arithmetic and one decision.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 15-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__init__</span>(self, nin, nonlin=<span class="t-key">True</span>):</span>
+<span class="cl">        self.w = [<span class="t-fn">Value</span>(random.<span class="t-fn">uniform</span>(<span class="t-num">-1</span>,<span class="t-num">1</span>)) <span class="t-key">for</span> _ <span class="t-key">in</span> <span class="t-fn">range</span>(nin)]</span>
+<span class="cl">        self.b = <span class="t-fn">Value</span>(<span class="t-num">0</span>)</span>
+<span class="cl">        self.nonlin = nonlin</span>
+<span class="cl"></span>
+<span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        act = <span class="t-fn">sum</span>((wi*xi <span class="t-key">for</span> wi,xi <span class="t-key">in</span> <span class="t-fn">zip</span>(self.w, x)), self.b)</span>
+<span class="cl">        <span class="t-key">return</span> act.<span class="t-fn">relu</span>() <span class="t-key">if</span> self.nonlin <span class="t-key">else</span> act</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>Set up a neuron that expects a certain number of inputs.</li>
+            <li>Give it one <button class="gloss" type="button" popovertarget="g-weight">weight</button><span class="gloss-def" popover id="g-weight">A dial controlling how much one input matters to this neuron. Training is nothing more than turning these dials a little at a time.</span> per input, each starting somewhere random between -1 and 1. Random, because identical starting dials would make every neuron learn the identical thing.</li>
+            <li>Add a <button class="gloss" type="button" popovertarget="g-bias">bias</button><span class="gloss-def" popover id="g-bias">A constant the neuron adds no matter what the inputs are. It shifts the threshold, letting the neuron fire more or less eagerly.</span> starting at zero — its opinion before it has seen anything.</li>
+            <li>Remember whether this neuron should flatten its output or pass it through raw.</li>
+            <li>This is what runs when you treat the neuron like a function and write <code>n(x)</code>.</li>
+            <li>Pair each input with its weight, multiply, and total them up — starting the running total <em>at the bias</em> rather than at zero. That detail is why the bias needs no line of its own.</li>
+            <li>Optionally pass the result through <button class="gloss" type="button" popovertarget="g-relu">ReLU</button><span class="gloss-def" popover id="g-relu">A rule that says: if the number is negative, make it zero; otherwise leave it alone. That single kink is what lets stacked layers learn curved patterns instead of only straight lines.</span>. Without that kink, stacking a hundred layers would still only ever draw a straight line.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="match u-reveal" data-u="match">
+        <div class="match__chips">
+          <button class="match__chip" type="button" data-u-chip="value">Value</button>
+          <button class="match__chip" type="button" data-u-chip="neuron">Neuron</button>
+          <button class="match__chip" type="button" data-u-chip="layer">Layer</button>
+          <button class="match__chip" type="button" data-u-chip="mlp">MLP</button>
+        </div>
+        <div class="match__slots">
+          <div class="match__row">
+            <p class="match__prompt">Remembers one number, who made it, and how to pass credit back</p>
+            <button class="match__slot" type="button" data-u-slot="value" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Weighs each input, totals them with a bias, optionally clips at zero</p>
+            <button class="match__slot" type="button" data-u-slot="neuron" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Runs a row of those on the same input and collects the answers</p>
+            <button class="match__slot" type="button" data-u-slot="layer" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Feeds the output of one stage into the next, front to back</p>
+            <button class="match__slot" type="button" data-u-slot="mlp" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+        </div>
+        <p class="match__result" data-u-result role="status" aria-live="polite"></p>
+        <div class="match__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check matches</button>
+          <button class="btn" type="button" data-u-again>Reset</button>
+        </div>
+      </div>
+
+      <figure class="figure u-reveal"><svg class="fig" viewBox="0 0 963 150" role="img" aria-labelledby="fig-composition-t fig-composition-d" preserveAspectRatio="xMidYMid meet"><title id="fig-composition-t">What each piece is built from</title><desc id="fig-composition-d">A Value is one remembering number. Many Values make a Neuron. A row of Neurons makes a Layer. Stacked Layers make the MLP you actually call.</desc><defs><marker id="fig-composition-tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="fig-arrowhead"/></marker></defs><g aria-hidden="true"><rect class="fig-node" x="24" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="99" y="64" text-anchor="middle">Value</text><text class="fig-note" x="99" y="82" text-anchor="middle">one number + memory</text><rect class="fig-node" x="279" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="354" y="64" text-anchor="middle">Neuron</text><text class="fig-note" x="354" y="82" text-anchor="middle">weights, bias, ReLU</text><rect class="fig-node" x="534" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="609" y="64" text-anchor="middle">Layer</text><text class="fig-note" x="609" y="82" text-anchor="middle">a row of neurons</text><rect class="fig-node" x="790" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="865" y="64" text-anchor="middle">MLP</text><text class="fig-note" x="865" y="82" text-anchor="middle">stacked layers</text><line class="fig-edge" x1="179" y1="68" x2="270" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="225" y="56" text-anchor="middle">many make one</text><line class="fig-edge" x1="434" y1="68" x2="525" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="480" y="56" text-anchor="middle">a row of</text><line class="fig-edge" x1="689" y1="68" x2="781" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="735" y="56" text-anchor="middle">stacked into</text></g></svg><figcaption class="figure__caption">Four characters, each built from the one before it. There is nothing else in the library.</figcaption><details class="figure__alt"><summary>Described in words</summary><p>A Value is one remembering number. Many Values make a Neuron. A row of Neurons makes a Layer. Stacked Layers make the MLP you actually call. Parts: Value — one number + memory; Neuron — weights, bias, ReLU; Layer — a row of neurons; MLP — stacked layers Links: value → neuron (many make one); neuron → layer (a row of); layer → mlp (stacked into)</p></details></figure>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">One call — <code>model.parameters()</code> — reaches every trainable number in the network, because each level asks the level below.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>The base class Module defines <code>parameters()</code> returning an empty list, and <code>zero_grad()</code> that loops over whatever <code>parameters()</code> yields. Neuron overrides it with its weights plus bias; Layer concatenates its neurons' lists; MLP concatenates its layers'. Nothing keeps a registry — the list is rebuilt by recursion every call, which is why nothing can ever be stale.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Copy PyTorch&#8217;s API shape instead of inventing one</h3>
+          <span class="tradeoff__src">README.md — "a small neural networks library… with a PyTorch-like API"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>The idioms learners will meet next: <code>model(x)</code>, <code>parameters()</code>, <code>zero_grad()</code>, <code>backward()</code>.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>A cleaner bespoke interface that might avoid PyTorch&#8217;s sharp edges.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>It inherits the footguns too — chief among them that forgetting <code>zero_grad()</code> fails silently, exactly as it does in the real thing.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never for this library: transferring to PyTorch is the goal, so matching its shape is the feature.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">Someone who values reproducibility</p>
+        <blockquote class="defend__q">Weights start at <code>random.uniform(-1,1)</code>, so every run gives different results. Zeros would be reproducible — why is randomness the default?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Start every weight at the same value and every neuron in a layer computes the same output, receives the same gradient, and takes the same update — they are clones at birth and clones forever, so a hundred-neuron layer learns exactly one thing. Randomness is not decoration; it is what breaks the symmetry so neurons can specialise. Reproducibility is recovered the standard way: seed the generator, keep the randomness.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "random just works better in practice". The follow-up is <em>why?</em> — and if you cannot say "identical neurons get identical gradients", you have a superstition, not an answer.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="a"
+             data-u-if-right="Each level asks the level below and passes the list up, so one call on the network reaches every dial in it. That pattern has a name worth knowing: recursion over a tree."
+             data-u-if-wrong="Look at what the network does when asked for its parameters — it loops over its layers and asks each of them the same question.">
+          <h3 class="check__ask">You want to know how many trainable numbers your network has. Where does that come from?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a"><code>len(model.parameters())</code> — each level asks the level below</button>
+            <button class="check__opt" type="button" data-u-answer="b">You work it out by hand from the layer sizes</button>
+            <button class="check__opt" type="button" data-u-answer="c">A global counter inside Value tracks every one ever made</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="The network switches ReLU off for its last layer on purpose. A flattened output could never be negative, and a final score often needs to be."
+             data-u-if-wrong="Something about the last layer is deliberately different from the others. Ask what flattening the negative half would do to a final answer that is allowed to go below zero.">
+          <h3 class="check__ask">You add a layer at the end of a network and suddenly its predictions can never go below zero. What did you miss?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">The new layer needs more neurons</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases should have started random, not at zero</button>
+            <button class="check__opt" type="button" data-u-answer="c">The final layer is meant to be linear — ReLU is switched off there deliberately</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-3" data-u-short="Forward pass">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 03</span>
+      <h1 class="chapter__title">The forward pass</h1>
+      <p class="chapter__lede">You hand the network two numbers. Follow them all the way to an answer.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A rumour going up a building</h2>
+        <p>Each floor of an office hears the rumour from the floor below, adds its own spin, and passes it up. Nobody on the third floor ever speaks to the first — each <button class="gloss" type="button" popovertarget="g-layer">layer</button><span class="gloss-def" popover id="g-layer">One row of neurons, all reading the same input and each producing a single number. Stacking layers is what makes a network deep.</span> only knows what the one below it said.</p>
+        <p>That is the <button class="gloss" type="button" popovertarget="g-forward">forward pass</button><span class="gloss-def" popover id="g-forward">One trip through the network, inputs to output, producing a prediction. The return trip — working out who was to blame for the error — is the backward pass.</span>, and it is three lines long.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 51-54</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        <span class="t-key">for</span> layer <span class="t-key">in</span> self.layers:</span>
+<span class="cl">            x = <span class="t-fn">layer</span>(x)</span>
+<span class="cl">        <span class="t-key">return</span> x</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The whole network's front door. Writing <code>model(x)</code> lands here, because the class defines <button class="gloss" type="button" popovertarget="g-call">__call__</button><span class="gloss-def" popover id="g-call">A special Python method that makes an object usable as if it were a function. Defining it is why you write model(x) rather than model.run(x).</span>.</li>
+            <li>Walk the layers in order, front to back.</li>
+            <li>Hand the current numbers to this layer, and let its answer become the new current numbers. <code>x</code> is a baton being passed, not a record being kept.</li>
+            <li>Whatever the last layer said is the prediction.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="thread u-reveal" data-u="thread">
+        <div class="thread__log">
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-4)">Y</span>
+            <div class="thread__bubble"><span class="thread__name">You</span>model([2.0, 3.0]) — go.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 1, you are up. Here is [2.0, 3.0]. I will wait.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>All three of my neurons see the same input. Nobody gets a private copy.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-3)">N</span>
+            <div class="thread__bubble"><span class="thread__name">Neuron 2</span>w1×2.0 + w2×3.0 + b comes to -0.4. Negative, so my <button class="gloss" type="button" popovertarget="g-activation">activation</button><span class="gloss-def" popover id="g-activation">The single number a neuron produces after weighing its inputs. Engineers say "the activation" where you might say "what this neuron reckons".</span> is flattened to zero. I sit this round out.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Noted. I hold 0, my label is ReLU, and my parent is that -0.4. I forget nothing.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>Collected: [0.7, 0, 1.2]. Passing up.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 2, you are last, so no flattening. Your raw number is the answer.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Final: data -0.83, gradient 0. Every node behind me is still linked. Ready when you are.</div>
+          </div>
+        </div>
+        <div class="thread__typing" data-u-typing hidden>
+          <span class="thread__who" data-u-typing-who>?</span>
+          <span class="thread__dots"><span></span><span></span><span></span></span>
+        </div>
+        <div class="thread__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next message</button>
+          <button class="btn" type="button" data-u-playall>Play all</button>
+          <button class="btn" type="button" data-u-restart>Replay</button>
+          <span class="thread__count" data-u-count></span>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">🔎</span>
+        <div>
+          <strong class="aside__title">Nothing has been learned yet</strong>
+          <p>Read the last message again: the gradient is still zero. The forward pass produces an answer and builds a graph, and that is all it does. Learning has not started.</p>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The graph is not a permanent structure — a fresh one is built on every single call, as a side effect of the arithmetic.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Nothing in nn.py stores connections between calls. Each <code>model(x)</code> runs the multiplies and adds again, and each operation mints new Value objects with fresh parent links — the graph exists because the arithmetic just happened, and is garbage-collected afterwards. That is why the training loop may freely change <code>p.data</code> between calls: next call, a new graph is built around the nudged numbers.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">An API designer, reading Layer&#8217;s last line</p>
+        <blockquote class="defend__q">Returning a bare Value when there is one neuron but a list when there are two is an inconsistency that will bite someone. Pick one shape and keep it.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is a deliberate convenience aimed at the most common case: the final layer of a classifier has one neuron, and unwrapping there means every caller writes <code>score</code> instead of <code>score[0]</code>. The criticism is still fair — in the middle of a network the changing shape genuinely surprises people, and PyTorch chose the opposite trade: always a tensor, always the same shape. Defensible is not the same as free; this one purchases ergonomics at the price of a surprise.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "nobody will notice". The follow-up is chapter three&#8217;s own quiz — the shape difference is noticeable enough that this course tests for it.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Stacked straight lines are still a straight line. The kink at zero is what makes depth worth anything, which is why the neuron takes a switch for it at all."
+             data-u-if-wrong="More layers of pure multiply-and-add collapse back into a single multiply-and-add. Something has to break the straightness.">
+          <h3 class="check__ask">Predictions move in a perfectly straight line however you vary the input. A colleague suggests adding more layers. Why will that not help on its own?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It will help — deeper is always better</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases are all zero, so the layers cancel out</button>
+            <button class="check__opt" type="button" data-u-answer="c">Without a kink between them, stacked layers collapse into one straight line</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="A layer with one neuron hands back the bare number rather than a one-item list. Convenient at the end of a network, and a classic source of confusion anywhere else."
+             data-u-if-wrong="Read the last line of Layer's call method again — it treats the single-neuron case specially.">
+          <h3 class="check__ask">A layer with one neuron returns something shaped differently from a layer with three. What is going on?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">One-neuron layers skip ReLU automatically</button>
+            <button class="check__opt" type="button" data-u-answer="b">It unwraps the single result and hands back the bare number</button>
+            <button class="check__opt" type="button" data-u-answer="c">It returns nothing and the network fills the value in</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-4" data-u-short="Backpropagation">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 04</span>
+      <h1 class="chapter__title">Backpropagation</h1>
+      <p class="chapter__lede">The return journey that assigns blame — and the only reason any of this learns.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The incident review</h2>
+        <p>A parcel arrives three days late. The investigation does not start at the warehouse; it starts at the doorstep and works backwards. The courier was late because the depot was late, because the sorting hub was late.</p>
+        <p>Each stage learns how much of the delay was its own. That backwards walk is <button class="gloss" type="button" popovertarget="g-backprop">backpropagation</button><span class="gloss-def" popover id="g-backprop">Walking the graph from the answer back to the inputs, working out how much each number contributed to the error. Say it by name to an assistant and you will get precise help.</span>, and the number each node ends up holding is its <button class="gloss" type="button" popovertarget="g-gradient">gradient</button><span class="gloss-def" popover id="g-gradient">The answer to one question: if I nudge this number up slightly, does the final error go up or down, and by how much? Positive means nudging up makes things worse.</span>.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 67-70</span>
+          <pre><code><span class="cl">        <span class="t-com"># go one variable at a time and apply the chain rule to get its gradient</span></span>
+<span class="cl">        self.grad = <span class="t-num">1</span></span>
+<span class="cl">        <span class="t-key">for</span> v <span class="t-key">in</span> <span class="t-fn">reversed</span>(topo):</span>
+<span class="cl">            v.<span class="t-fn">_backward</span>()</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The comment names the rule from calculus this implements. You do not need the calculus; you need to know the walk exists.</li>
+            <li>Seed it: this node's effect on itself is exactly one. Nudge the error up by one and the error goes up by one.</li>
+            <li>Now walk the list of nodes <em>backwards</em>. The order was worked out a few lines earlier, and it is the whole trick.</li>
+            <li>Fire each node's note-to-self, the one that was stapled on when it was created. Because of the ordering, every node has already collected all of its incoming credit before it passes any on.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">You have met this ordering before</strong>
+          <p>Listing every node so that parents always come before children is a <button class="gloss" type="button" popovertarget="g-toposort">topological sort</button><span class="gloss-def" popover id="g-toposort">Arranging items so that everything a step depends on comes before it. Build systems, spreadsheet recalculation and task schedulers all run on the same idea.</span> — the same algorithm a build system uses to decide what to compile first. Recognising it here means recognising it everywhere.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"d","say":"Calling backward on d first lists every ancestor in dependency order."},
+        {"at":"d","say":"Seed the walk: d gets a gradient of 1, because nudging d moves d one for one."},
+        {"at":"add","from":"d","to":"add","say":"The + node fires. Addition splits credit evenly, so both parents receive the gradient unchanged."},
+        {"at":"mul","from":"add","to":"mul","say":"The * node fires. Multiplication swaps: each parent is scaled by what the other one held."},
+        {"at":"a","from":"mul","to":"a","say":"a ends up with 2.0 and b with 4.0. Every input now knows exactly how much it mattered."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>a.grad = 2.0</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>the * node</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d.grad = 1</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="The same expression as chapter one, running in reverse.">The same expression as chapter one, running in reverse.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>The final node is seeded with a gradient of 1.</li>
+          <li>Addition passes its gradient to both parents unchanged.</li>
+          <li>Multiplication scales each parent by what the other held.</li>
+          <li>The inputs end up holding how much each of them mattered.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One character that is easy to miss</h2>
+        <p>Every note-to-self in engine.py adds to the gradient with <code>+=</code>, never <code>=</code>. It looks like a style choice. It is not.</p>
+      </section>
+
+      <div class="cards u-reveal">
+        <div class="card"><span class="card__glyph" aria-hidden="true">➕</span><h3 class="card__title">Why it adds</h3><p>A number used in two places earns credit from both. Assigning would let the second contribution quietly erase the first.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🧹</span><h3 class="card__title">Why wiping matters</h3><p>Because gradients accumulate, they have to be cleared before every training step, or this round's blame lands on top of last round's.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🔁</span><h3 class="card__title">Same trap in PyTorch</h3><p>Real training loops call zero_grad for exactly this reason. Same trap, same fix, four orders of magnitude more code.</p></div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The ordering guarantees each note-to-self fires exactly once, only after all of its incoming credit has arrived.</p>
+        <details class="depth__more">
+          <summary>Where it gets subtle</summary>
+          <div class="depth__body">
+            <p>The subtlety is a number used twice. In <code>a + a</code>, both parents of the sum are the same object, so its note adds to <code>a.grad</code> twice — which is the correct calculus, and only works because the notes accumulate with <code>+=</code> onto a node that fires after all paths have reported. Replace <code>+=</code> with <code>=</code> and the second path silently erases the first. The fieldwork below lets you catch this with your own eyes.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="fieldwork u-reveal">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~4 minutes, read-only</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>micrograd/engine.py</code> and reread <code>__add__</code>, lines 13-22.</p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>Someone writes <code>b = a + a</code>, then <code>b.backward()</code>. Write down the final value of <code>a.grad</code> — and which exact lines produce it.</p></div>
+          <details class="fieldwork__check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer">
+              <p><code>a.grad</code> ends at <strong>2</strong>. Both <code>self</code> and <code>other</code> are the same object, so lines 18 and 19 — <code>self.grad += out.grad</code> and <code>other.grad += out.grad</code> — add 1 to the same number twice. If you predicted 1, you have just met the exact bug that <code>=</code> instead of <code>+=</code> would create, and you will never write it.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Powers accept plain numbers only, never another Value</h3>
+          <span class="tradeoff__src">micrograd/engine.py, line 36 — "only supporting int/float powers for now"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>An <code>assert</code> that refuses a Value exponent, with the reason written into the error message itself.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>General <code>x ** y</code> where both vary — which would drag logarithms into the gradient rule for a case the library never needs.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Division works only because it is rewritten as <code>x * other**-1</code>; anything fancier with exponents is simply out of bounds.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>The message says "for now" — the boundary is explicitly provisional, waiting for a need that teaching has never had.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A newcomer reading backward() closely</p>
+        <blockquote class="defend__q">Why does the walk start with <code>self.grad = 1</code>? That looks like an arbitrary magic number smuggled into the maths.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is the one gradient you get for free: the question every gradient answers is "if this number moves, how much does the <em>final</em> number move?" — and the final number moves one-for-one with itself. Every other gradient in the graph is manufactured from that seed by the chain rule, each note multiplying or passing it backwards. Change the seed to 2 and every gradient in the network doubles, which is exactly why 1 is the only honest start.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it is just a convention". The follow-up — <em>what would happen with 0?</em> — has a concrete answer (every gradient becomes 0 and nothing learns), which proves the value is doing real work.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The ordering guarantees a node has collected all its incoming credit before it passes any on. Fire them in creation order and nodes push half-finished numbers downstream."
+             data-u-if-wrong="The ordering is not about speed or tidiness. Think about a node that receives credit along two different paths, firing before the second path has arrived.">
+          <h3 class="check__ask">An assistant offers to simplify the backward pass by dropping the ordering step and looping over nodes in the order they were created. What goes wrong?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — creation order and dependency order are always the same</button>
+            <button class="check__opt" type="button" data-u-answer="b">Nodes fire before all their credit has arrived, so gradients come out quietly wrong — no crash, just a network that never quite learns</button>
+            <button class="check__opt" type="button" data-u-answer="c">It raises an infinite recursion error</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="That shape — fine for a few steps, then chaos, with nothing in the logs — is the signature of stale gradients piling up. Recognising it saves hours."
+             data-u-if-wrong="Picture a gradient that is added to and never reset. After ten steps it holds roughly ten steps of blame, and the update overshoots wildly.">
+          <h3 class="check__ask">You forget to wipe the gradients in your training loop. What do you actually see?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">A crash on the second iteration</button>
+            <button class="check__opt" type="button" data-u-answer="b">Predictions frozen at their starting values forever</button>
+            <button class="check__opt" type="button" data-u-answer="c">A few good steps, then the error explodes or stalls — with no error message anywhere</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-5" data-u-short="When it breaks">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 05</span>
+      <h1 class="chapter__title">When it breaks</h1>
+      <p class="chapter__lede">The failures that never raise an error, and how to smell them out anyway.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Every bug here is silent</h2>
+        <p>A website that breaks throws a red <button class="gloss" type="button" popovertarget="g-stacktrace">stack trace</button><span class="gloss-def" popover id="g-stacktrace">The list of function calls that led to a crash, printed newest first. It tells you where the program was standing when it gave up.</span> at you. A training loop that breaks returns a number.</p>
+        <p>A perfectly reasonable-looking, completely wrong number. This is the most useful thing to internalise about machine learning code: <strong>the absence of an error means nothing.</strong></p>
+      </section>
+
+      <div class="steps u-reveal">
+        <div class="step"><div><strong>The error falls, then explodes</strong><p>Blame accumulating across steps — a missing wipe, or a step size too large</p></div></div>
+        <div class="step"><div><strong>The error refuses to move</strong><p>Every gradient is zero. Often an entire layer is stuck in the flat negative half of ReLU</p></div></div>
+        <div class="step"><div><strong>It dies on a big batch</strong><p><button class="gloss" type="button" popovertarget="g-recursion">Recursion</button><span class="gloss-def" popover id="g-recursion">A function that calls itself to handle a smaller piece of the same problem. Each call waits for the one inside it, and every language caps how deep that nesting may go.</span>: the ordering step calls itself once per node, and Python gives up around a thousand deep</p></div></div>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The four lines that prevent most of it</h2>
+        <p>The whole defence lives on the shared base class, so every neuron, layer and network inherits it.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 4-8</span>
+          <pre><code><span class="cl"><span class="t-key">class</span> <span class="t-fn">Module</span>:</span>
+<span class="cl"></span>
+<span class="cl">    <span class="t-key">def</span> <span class="t-fn">zero_grad</span>(self):</span>
+<span class="cl">        <span class="t-key">for</span> p <span class="t-key">in</span> self.<span class="t-fn">parameters</span>():</span>
+<span class="cl">            p.grad = <span class="t-num">0</span></span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>A <button class="gloss" type="button" popovertarget="g-baseclass">base class</button><span class="gloss-def" popover id="g-baseclass">Behaviour written once and shared by several other classes, instead of copied into each. Neuron, Layer and MLP all build on this one.</span> that the three network pieces share, so these lines are written once rather than three times.</li>
+            <li>Wipe every gradient inside whatever this object contains.</li>
+            <li>Ask for the full list of dials — the same recursive walk from chapter two, so calling this on the network reaches every weight in it.</li>
+            <li>Set each accumulated blame back to zero. Miss this and the next backward pass adds to numbers that are already stale.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="hunt u-reveal" data-u="hunt">
+        <h3>This training loop runs without complaint and never improves. One line is responsible.</h3>
+        <div class="hunt__code">
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Looping a fixed number of times is fine — keep looking."><span class="hunt__n">1</span><code>for k in range(100):</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Asking the network for its predictions is exactly what should happen first."><span class="hunt__n">2</span><code>    scores = [model(x) for x in inputs]</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Measuring how wrong the predictions were is correct at this point."><span class="hunt__n">3</span><code>    loss = sum((s - y)**2 for s, y in zip(scores, targets))</code></button>
+          <button class="hunt__line" type="button" data-u-line="bug" data-u-why="Gradients are added to, never replaced, so the blame from round one is still sitting there when round two adds to it. A call to model.zero_grad() belongs immediately before this line."><span class="hunt__n">4</span><code>    loss.backward()</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Walking every parameter is the right way to apply an update."><span class="hunt__n">5</span><code>    for p in model.parameters():</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="The minus sign is correct — you move downhill, against the gradient."><span class="hunt__n">6</span><code>        p.data -= 0.01 * p.grad</code></button>
+        </div>
+        <p class="hunt__result" data-u-result role="status" aria-live="polite"></p>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The correct loop, one move at a time</h2>
+        <p>Four moves in a fixed order. Get the order wrong and nothing complains.</p>
+      </section>
+
+      <div class="stack u-reveal" data-u="stack">
+        <div class="stack__tabs" role="tablist">
+          <button class="stack__tab" type="button" role="tab" data-u-tab="fwd" aria-selected="true">1 · Predict</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="loss" aria-selected="false">2 · Measure</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="back" aria-selected="false">3 · Blame</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="step" aria-selected="false">4 · Nudge</button>
+        </div>
+        <div class="stack__pane" data-u-pane="fwd" role="tabpanel"><p><strong>Ask the network what it thinks.</strong> Numbers flow front to back and a graph gets built as a side effect. No learning happens here at all.</p></div>
+        <div class="stack__pane" data-u-pane="loss" role="tabpanel" hidden><p><strong>Measure how wrong it was.</strong> The error is itself one of micrograd's numbers, sitting at the top of the graph — which is precisely why you can start the backward walk from it.</p></div>
+        <div class="stack__pane" data-u-pane="back" role="tabpanel" hidden><p><strong>Wipe first, then assign blame.</strong> Clear the gradients, then walk backwards. Skip the wipe and every step inherits the last one's numbers.</p></div>
+        <div class="stack__pane" data-u-pane="step" role="tabpanel" hidden><p><strong>Turn every dial a little.</strong> Each parameter moves against its gradient. Only the stored number changes — the graph itself is rebuilt from scratch next time round.</p></div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The recursion crash is a property of Python&#8217;s call stack, not of micrograd&#8217;s logic — the maths would be fine one node deeper.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p><code>build_topo</code> calls itself once for every node it has not yet visited, and each unfinished call occupies a stack frame while it waits. A long chain of operations means a long chain of waiting frames, and Python refuses somewhere near a thousand. The standard cure is mechanical — an explicit stack in a loop instead of the call stack — and the reason micrograd does not use it is the same reason it does everything else: the recursive version reads like the definition of the ordering it computes.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="fieldwork u-reveal">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~5 minutes, read-only</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>test/test_engine.py</code> in the repository.</p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>These tests assert that gradients are <em>correct</em> — yet nobody computed an expected value like 138.8338 by hand. Before looking: where do the right answers come from? Write down your guess.</p></div>
+          <details class="fieldwork__check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer">
+              <p>The tests build the identical expression twice — once with micrograd&#8217;s Value, once with PyTorch tensors — run <code>backward()</code> on both, and assert the numbers agree. The oracle is the industrial implementation of the same mathematics. That is a pattern worth keeping: when reimplementing something that already exists, the existing one is your test oracle, and you never hand-compute an expected value again.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">An engineer filing their first issue</p>
+        <blockquote class="defend__q">The RecursionError on large graphs is simply a bug. An iterative topological sort is twenty minutes of work — ship it.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>In a production library you would be right, and PyTorch is that library. Here the recursive version earns its fragility: it is four lines that read exactly like the definition — visit the parents, then yourself — and this codebase&#8217;s entire reason to exist is that every line teaches. The crash even teaches: it arrives precisely when your graph outgrows a toy, which is the moment to graduate anyway.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "just raise the recursion limit". The follow-up is <em>to what?</em> — the stack is finite, so the limit moves and the crash keeps its appointment; only the iterative rewrite removes it.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The ordering step calls itself once per node, and a giant batch makes a graph far deeper than Python allows. Smaller batches keep each graph shallow, which is one real reason batching exists beyond memory."
+             data-u-if-wrong="The error names recursion specifically. Ask which part of the engine calls itself, and how the size of your batch changes how deep it goes.">
+          <h3 class="check__ask">A loop that trains fine on twenty samples dies with a recursion error on fifty thousand in one batch. What is actually happening?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">The step size is too large and the numbers overflowed</button>
+            <button class="check__opt" type="button" data-u-answer="b">The ordering step calls itself once per node, and one giant batch makes a graph deeper than Python's limit</button>
+            <button class="check__opt" type="button" data-u-answer="c">micrograd has a hard cap on how many numbers can exist</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="a"
+             data-u-if-right="Naming the mechanism and the place leaves an assistant nothing to guess at. This is what the vocabulary is for."
+             data-u-if-wrong="The other two describe a symptom without naming a mechanism, so the assistant has to guess among a dozen causes — and it will usually guess the step size.">
+          <h3 class="check__ask">Your error explodes after five steps. Which request gets you the fastest correct fix?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">"Gradients are accumulating across iterations — check whether I am zeroing them before the backward pass"</button>
+            <button class="check__opt" type="button" data-u-answer="b">"My model is not working, please fix it"</button>
+            <button class="check__opt" type="button" data-u-answer="c">"The numbers are getting really big, make them smaller"</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+      <div class="recall u-reveal">
+        <h3 class="recall__title">Before you close this</h3>
+        <p class="recall__note">Answer these from memory before opening any of them — then again in three days, and once more next week. Say your confidence out loud first; being surprised by your own answer is the point.</p>
+        <div class="recall__list">
+          <div class="recall__item">
+            <p class="recall__q">Someone writes <code>b = a + a</code> and calls <code>b.backward()</code>. What is <code>a.grad</code>, and which single character in engine.py makes that answer possible?</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>2 — the plus in <code>+=</code>. Both parents are the same object, so the note adds to it twice; plain <code>=</code> would erase the first contribution.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Explain to a colleague why every training loop must call <code>zero_grad()</code>, and what they would see if they forgot.</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>Gradients accumulate by design, so each round&#8217;s blame lands on top of the last; the loop looks fine briefly, then the loss explodes or stalls with no error anywhere.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Walk <code>d = a * b + c</code> forwards and then backwards, naming what each node stores and when its note-to-self fires.</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>Forward: each operation mints a Value holding data, parents, and a closure. Backward: seed <code>d.grad = 1</code>, then fire notes in reverse topological order — addition passes credit through, multiplication swaps in the other operand&#8217;s data.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Why does the last layer of an MLP skip ReLU, and what symptom appears if it does not?</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>The final answer must be allowed to go negative; a squashed output never can, so predictions mysteriously floor at zero.</p></details>
+          </div>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">🎓</span>
+        <div>
+          <strong class="aside__title">What you now know</strong>
+          <p>Everything PyTorch does, micrograd does in 150 lines: a graph of operations, a backward walk that assigns blame, and a loop that nudges dials. The rest is speed, hardware, and convenience.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer class="u-colophon">Describes <code>micrograd</code> at commit <code>7bc720e</code> · Generated 27 Aug 2026 · regenerate when the code moves on</footer>
+</main>
+
+</body>
+</html>

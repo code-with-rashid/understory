@@ -1,0 +1,2327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How micrograd Works</title>
+<meta name="description" content="A hundred and fifty lines of Python that learn">
+<style>
+/* ============================================================
+   UNDERSTORY — course stylesheet
+   Copy verbatim into a course. Override only the tokens marked
+   "per-course" in the shell's inline <style>.
+   ============================================================ */
+
+/* ── TOKENS ───────────────────────────────────────────────── */
+:root {
+  color-scheme: light dark;
+
+  /* per-course: overridden in the shell */
+  --accent:        #0F6F76;
+  --accent-strong: #0A565C;
+  --accent-wash:   #E4F1F1;
+  --accent-quiet:  #7FB3B6;
+  --accent-ink:    #FFFFFF;   /* text placed on top of an accent fill */
+
+  --paper:      #FBFBFC;
+  --paper-alt:  #F4F5F7;
+  --surface:    #FFFFFF;
+  --ink:        #16181D;
+  --ink-soft:   #4A505E;
+  --ink-faint:  #757C8C;
+  --rule:       #E2E5EA;
+  --rule-soft:  #EDEFF3;
+
+  --code-bg:      #F4F6F9;
+  --code-ink:     #23272F;
+  --code-rule:    #DFE3EA;
+
+  --good:       #1B6E45;
+  --good-wash:  #E6F3EC;
+  --bad:        #A8342C;
+  --bad-wash:   #FBEAE8;
+  --note:       #7A5B0C;
+  --note-wash:  #FBF2DC;
+
+  --cast-1: #B4462F;
+  --cast-2: #1F6E8C;
+  --cast-3: #6A5AA8;
+  --cast-4: #97701A;
+  --cast-5: #2C7A54;
+
+  --serif: "Iowan Old Style", "Charter", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --sans:  system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono:  ui-monospace, SFMono-Regular, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+
+  --step--1: 0.875rem;
+  --step-0:  1.0625rem;
+  --step-1:  1.25rem;
+  --step-2:  1.5rem;
+  --step-3:  2rem;
+  --step-4:  2.75rem;
+  --step-5:  3.5rem;
+
+  --s1: 0.25rem;  --s2: 0.5rem;   --s3: 0.75rem;  --s4: 1rem;
+  --s5: 1.5rem;   --s6: 2rem;     --s7: 3rem;     --s8: 4rem;   --s9: 6rem;
+
+  --measure: 68ch;
+  --rail: 232px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --lift-1: 0 1px 2px rgba(22,24,29,0.06);
+  --lift-2: 0 6px 20px -6px rgba(22,24,29,0.14);
+
+  --beat: 220ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:     #0F1115;
+    --paper-alt: #14171D;
+    --surface:   #171B22;
+    --ink:       #E7E9ED;
+    --ink-soft:  #AEB4C0;
+    --ink-faint: #7C8494;
+    --rule:      #2A2F39;
+    --rule-soft: #21262E;
+
+    --code-bg:   #12151B;
+    --code-ink:  #D6DAE2;
+    --code-rule: #262C36;
+
+    /* the light accent fails contrast on a dark ground, so the default
+       lightens; the shell overrides these per palette */
+    --accent:        #238D95;
+    --accent-strong: #41A3AA;
+    --accent-quiet:  #41A3AA;
+    --accent-ink:    #0F1115;
+    --accent-wash: #10262A;
+    --good-wash:   #10251A;
+    --bad-wash:    #2A1512;
+    --note-wash:   #251E0C;
+
+    --cast-1: #E0765C;
+    --cast-2: #5EA9C6;
+    --cast-3: #A092DC;
+    --cast-4: #D0A34A;
+    --cast-5: #5FB588;
+
+    --lift-1: 0 1px 2px rgba(0,0,0,0.5);
+    --lift-2: 0 8px 24px -8px rgba(0,0,0,0.6);
+  }
+}
+
+/* ── BASE ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: var(--s7); }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--step-0)/1.65 var(--serif);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, .u-sans { font-family: var(--sans); font-weight: 650; letter-spacing: -0.015em; }
+h1 { font-size: var(--step-4); line-height: 1.08; }
+h2 { font-size: var(--step-2); line-height: 1.2; }
+h3 { font-size: var(--step-1); line-height: 1.3; }
+
+p { max-width: var(--measure); }
+p + p { margin-top: var(--s4); }
+strong { font-weight: 700; }
+em { font-style: italic; }
+
+a { color: var(--accent); text-underline-offset: 2px; }
+
+code, kbd, samp, pre { font-family: var(--mono); font-size: 0.9em; }
+:not(pre) > code {
+  background: var(--code-bg);
+  border: 1px solid var(--code-rule);
+  border-radius: 5px;
+  padding: 0.08em 0.32em;
+  color: var(--code-ink);
+  white-space: nowrap;
+}
+
+button { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+::selection { background: var(--accent-wash); color: var(--ink); }
+
+.u-visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ── SHELL & RAIL ─────────────────────────────────────────── */
+.u-progress {
+  position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 60;
+  background: var(--accent); width: 0;
+  transition: width 90ms linear;
+}
+
+.u-rail {
+  position: fixed; z-index: 50;
+  top: 0; left: 0; bottom: 0; width: var(--rail);
+  padding: var(--s6) var(--s4);
+  border-right: 1px solid var(--rule-soft);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(10px);
+  overflow-y: auto;
+}
+.u-rail__title {
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 700;
+  letter-spacing: 0.01em; margin-bottom: var(--s5); display: block;
+}
+.u-rail__list { list-style: none; padding: 0; display: grid; gap: var(--s1); }
+.u-rail__link {
+  display: grid; grid-template-columns: 1.4rem 1fr; gap: var(--s2);
+  align-items: baseline;
+  width: 100%; text-align: left;
+  padding: var(--s2) var(--s2);
+  border: 0; border-radius: 7px; background: none; cursor: pointer;
+  font-family: var(--sans); font-size: var(--step--1); line-height: 1.3;
+  color: var(--ink-soft);
+  transition: background var(--beat) var(--ease), color var(--beat) var(--ease);
+}
+.u-rail__link:hover { background: var(--rule-soft); color: var(--ink); }
+.u-rail__num { font-variant-numeric: tabular-nums; color: var(--ink-faint); }
+.u-rail__link[aria-current="true"] { color: var(--accent); background: var(--accent-wash); }
+.u-rail__link[aria-current="true"] .u-rail__num { color: var(--accent); }
+.u-rail__link[data-seen="true"]:not([aria-current="true"]) .u-rail__num { color: var(--accent-quiet); }
+
+.u-main { margin-left: var(--rail); }
+
+/* ── CHAPTERS ─────────────────────────────────────────────── */
+.chapter {
+  padding: var(--s9) var(--s6);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.chapter:nth-of-type(even) { background: var(--paper-alt); }
+.chapter__inner { max-width: 78ch; margin: 0 auto; }
+
+.chapter__eyebrow {
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  display: block; margin-bottom: var(--s3);
+}
+.chapter__lede {
+  font-size: var(--step-1); color: var(--ink-soft); margin-top: var(--s4);
+  max-width: var(--measure);
+}
+.chapter__body > * + * { margin-top: var(--s6); }
+.chapter__body { margin-top: var(--s8); }
+
+.beat { display: block; }
+.beat > * + * { margin-top: var(--s4); }
+.beat + .beat { margin-top: var(--s8); }
+.beat__head { margin-bottom: var(--s4); }
+
+/* ── REVEAL ───────────────────────────────────────────────── */
+.js .u-reveal { opacity: 0; transform: translateY(14px); }
+.js .u-reveal.is-in {
+  opacity: 1; transform: none;
+  transition: opacity 520ms var(--ease), transform 520ms var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .js .u-reveal { opacity: 1; transform: none; }
+}
+
+/* ── GLOSS (inline definitions, top layer, no clipping) ───── */
+.gloss {
+  font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  color: inherit;
+  border-bottom: 1.5px dashed var(--accent-quiet);
+  text-underline-offset: 3px;
+}
+.gloss:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+.gloss-def {
+  position: fixed;
+  margin: 0; border: 1px solid var(--rule); padding: var(--s4);
+  inline-size: min(34ch, calc(100vw - 2rem));
+  background: var(--surface); color: var(--ink);
+  border-radius: var(--radius); box-shadow: var(--lift-2);
+  font-family: var(--sans); font-size: var(--step--1); line-height: 1.5;
+}
+.gloss-def::backdrop { background: transparent; }
+.gloss-def b { color: var(--accent); }
+
+/* ── ANNOTATED CODE (code ↔ plain English) ────────────────── */
+.annotated {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border: 1px solid var(--rule); border-radius: var(--radius-lg);
+  overflow: hidden; background: var(--surface);
+  box-shadow: var(--lift-1);
+}
+.annotated__pane { padding: var(--s5); min-width: 0; }
+.annotated__pane--code { background: var(--code-bg); border-right: 1px solid var(--code-rule); }
+.annotated__pane--notes { background: var(--surface); }
+.annotated__label {
+  display: block; font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint);
+  margin-bottom: var(--s3);
+}
+.annotated__file {
+  font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-faint);
+  display: block; margin-bottom: var(--s3); word-break: break-all;
+}
+.annotated pre { margin: 0; }
+.annotated code { color: var(--code-ink); font-size: var(--step--1); line-height: 1.7; }
+/* one source line = one rendered line; blank lines keep their height */
+.annotated pre > code { white-space: normal; display: block; }
+.cl {
+  display: block; white-space: pre-wrap; word-break: break-word;
+  padding-left: 2.5ch; text-indent: -2.5ch;  /* wrapped lines hang, so they read as continuations */
+}
+.cl:empty::after { content: "\00a0"; }
+
+.annotated__notes ol { list-style: none; padding: 0; counter-reset: note; }
+.annotated__notes li {
+  counter-increment: note;
+  font-size: var(--step--1); line-height: 1.6; color: var(--ink-soft);
+  padding: var(--s3) 0 var(--s3) var(--s5);
+  border-bottom: 1px solid var(--rule-soft);
+  position: relative;
+}
+.annotated__notes li:last-child { border-bottom: 0; }
+.annotated__notes li::before {
+  content: counter(note);
+  position: absolute; left: 0; top: var(--s3);
+  font-family: var(--mono); font-size: 0.6875rem; color: var(--accent);
+}
+
+/* syntax — one palette, legible on both code backgrounds */
+.t-key  { color: #8250DF; }
+.t-str  { color: #0A6E4A; }
+.t-fn   { color: #1F5FBF; }
+.t-num  { color: #A2521A; }
+.t-com  { color: var(--ink-faint); font-style: italic; }
+.t-prop { color: #8A5A00; }
+.t-op   { color: #0E7490; }
+@media (prefers-color-scheme: dark) {
+  .t-key  { color: #C4A7F5; }
+  .t-str  { color: #86D8AC; }
+  .t-fn   { color: #86B4F5; }
+  .t-num  { color: #E7A972; }
+  .t-prop { color: #E3C67A; }
+  .t-op   { color: #7DD3DC; }
+}
+
+/* ── CHECK (quiz) ─────────────────────────────────────────── */
+.check {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); padding: var(--s6);
+  box-shadow: var(--lift-1);
+}
+.check__scenario {
+  border-left: 3px solid var(--accent); background: var(--accent-wash);
+  padding: var(--s4) var(--s5); border-radius: 0 var(--radius) var(--radius) 0;
+  margin-bottom: var(--s5);
+}
+.check__scenario-label {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+  display: block; margin-bottom: var(--s2);
+}
+.check__q + .check__q { margin-top: var(--s7); padding-top: var(--s7); border-top: 1px solid var(--rule-soft); }
+.check__ask { font-size: var(--step-1); margin-bottom: var(--s4); }
+.check__opts { display: grid; gap: var(--s2); margin: 0; padding: 0; border: 0; }
+.check__opt {
+  display: grid; grid-template-columns: 1.1rem 1fr; gap: var(--s3); align-items: start;
+  width: 100%; text-align: left;
+  padding: var(--s3) var(--s4);
+  background: var(--paper); border: 1.5px solid var(--rule);
+  border-radius: var(--radius); cursor: pointer;
+  font-family: var(--sans); font-size: var(--step--1); line-height: 1.5;
+  transition: border-color var(--beat) var(--ease), background var(--beat) var(--ease);
+}
+.check__opt:hover:not(:disabled) { border-color: var(--accent-quiet); }
+.check__opt::before {
+  content: ""; inline-size: 1.05rem; block-size: 1.05rem; margin-top: 0.1rem;
+  border: 1.5px solid var(--rule); border-radius: 50%;
+}
+.check__opt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
+.check__opt[aria-pressed="true"]::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--surface); }
+.check__opt[data-verdict="right"] { border-color: var(--good); background: var(--good-wash); }
+.check__opt[data-verdict="wrong"] { border-color: var(--bad); background: var(--bad-wash); }
+.check__opt:disabled { cursor: default; }
+
+.check__result {
+  margin-top: var(--s4); padding: var(--s4);
+  border-radius: var(--radius); font-size: var(--step--1); line-height: 1.6;
+  display: none;
+}
+.check__result[data-state] { display: block; }
+.check__result[data-state="right"] { background: var(--good-wash); color: var(--good); }
+.check__result[data-state="wrong"] { background: var(--bad-wash); color: var(--bad); }
+.check__result[data-state="empty"] { background: var(--note-wash); color: var(--note); }
+.check__actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+
+/* no-JS fallback: answers stay readable */
+.check__fallback { margin-top: var(--s4); font-size: var(--step--1); }
+.js .check__fallback { display: none; }
+
+/* ── BUTTONS ──────────────────────────────────────────────── */
+.btn {
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+  padding: var(--s2) var(--s4); border-radius: 8px; cursor: pointer;
+  border: 1.5px solid var(--rule); background: var(--surface); color: var(--ink);
+  transition: border-color var(--beat) var(--ease), background var(--beat) var(--ease);
+}
+.btn:hover { border-color: var(--accent-quiet); }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn--primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── TRACE (step-through data flow) ───────────────────────── */
+.trace {
+  position: relative;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); padding: var(--s6); box-shadow: var(--lift-1);
+}
+.trace__nodes {
+  display: flex; flex-wrap: wrap; gap: var(--s4);
+  justify-content: space-between; align-items: stretch;
+}
+.trace__node {
+  flex: 1 1 7rem; min-width: 6.5rem;
+  display: grid; gap: var(--s2); justify-items: center; text-align: center;
+  padding: var(--s4) var(--s2); border-radius: var(--radius);
+  border: 1.5px solid var(--rule); background: var(--paper);
+  font-family: var(--sans); font-size: 0.75rem; color: var(--ink-soft);
+  transition: border-color var(--beat) var(--ease), transform var(--beat) var(--ease);
+}
+.trace__node[data-lit="true"] {
+  border-color: var(--accent); color: var(--ink);
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.trace__glyph {
+  inline-size: 2.25rem; block-size: 2.25rem; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-wash); color: var(--accent);
+  font-family: var(--mono); font-size: var(--step--1);
+}
+.trace__pulse {
+  position: absolute; inline-size: 12px; block-size: 12px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash);
+  opacity: 0; pointer-events: none;
+}
+.trace__pulse.is-moving { animation: u-pulse 700ms var(--ease) forwards; }
+@keyframes u-pulse {
+  0%   { opacity: 0; left: var(--from-x); top: var(--from-y); }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; left: var(--to-x); top: var(--to-y); }
+}
+.trace__caption {
+  margin-top: var(--s5); padding: var(--s4);
+  background: var(--paper-alt); border-radius: var(--radius);
+  font-size: var(--step--1); min-height: 3.5rem; color: var(--ink-soft);
+}
+.trace__controls, .thread__controls {
+  display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; margin-top: var(--s4);
+}
+.trace__count, .thread__count {
+  font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-faint); margin-left: auto;
+}
+.trace__script { margin-top: var(--s4); font-size: var(--step--1); }
+.js .trace__script { display: none; }
+
+/* ── THREAD (component dialogue) ──────────────────────────── */
+.thread {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--lift-1);
+}
+.thread__log { padding: var(--s5); display: grid; gap: var(--s4); }
+.thread__msg { display: grid; grid-template-columns: 2rem 1fr; gap: var(--s3); align-items: start; }
+.js .thread__msg[hidden] { display: none; }
+.thread__msg.is-new { animation: u-rise 300ms var(--ease); }
+@keyframes u-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.thread__who {
+  inline-size: 2rem; block-size: 2rem; border-radius: 50%;
+  display: grid; place-items: center; color: #fff;
+  font-family: var(--sans); font-size: 0.75rem; font-weight: 700;
+  background: var(--ink-faint);
+}
+.thread__bubble {
+  background: var(--paper-alt); border-radius: 4px var(--radius) var(--radius) var(--radius);
+  padding: var(--s3) var(--s4); font-size: var(--step--1); line-height: 1.55;
+}
+.thread__name {
+  display: block; font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.04em; margin-bottom: var(--s1);
+}
+.thread__typing { display: grid; grid-template-columns: 2rem 1fr; gap: var(--s3); align-items: center; padding: 0 var(--s5) var(--s4); }
+.thread__typing[hidden] { display: none; }
+.thread__dots { display: flex; gap: 4px; }
+.thread__dots span {
+  inline-size: 6px; block-size: 6px; border-radius: 50%; background: var(--ink-faint);
+  animation: u-bounce 1.3s infinite;
+}
+.thread__dots span:nth-child(2) { animation-delay: 0.18s; }
+.thread__dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes u-bounce { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-5px); } }
+.thread__controls { padding: var(--s4) var(--s5); border-top: 1px solid var(--rule-soft); background: var(--paper-alt); margin-top: 0; }
+
+/* ── MATCH (drag and drop) ────────────────────────────────── */
+.match { display: grid; gap: var(--s5); }
+.match__chips { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.match__chip {
+  padding: var(--s2) var(--s4); border-radius: 999px; cursor: grab;
+  background: var(--accent); color: var(--accent-ink); border: 0;
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+}
+.match__chip[data-used="true"] { opacity: 0.35; cursor: default; }
+.match__chip.is-lifted { opacity: 0.5; }
+.match__chip.is-armed { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.match__slots { display: grid; gap: var(--s3); }
+.match__row {
+  display: grid; grid-template-columns: 1fr minmax(8rem, 12rem); gap: var(--s4);
+  align-items: center;
+  padding: var(--s4); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: var(--radius);
+}
+.match__prompt { font-size: var(--step--1); }
+.match__slot {
+  min-height: 2.5rem; display: grid; place-items: center; padding: var(--s2);
+  border: 1.5px dashed var(--rule); border-radius: 8px;
+  font-family: var(--sans); font-size: var(--step--1); color: var(--ink-faint);
+  background: var(--paper);
+}
+.match__slot.is-over { border-color: var(--accent); background: var(--accent-wash); }
+.match__slot[data-verdict="right"] { border-style: solid; border-color: var(--good); background: var(--good-wash); color: var(--good); font-weight: 600; }
+.match__slot[data-verdict="wrong"] { border-style: solid; border-color: var(--bad); background: var(--bad-wash); color: var(--bad); }
+.match__ghost { position: fixed; z-index: 999; pointer-events: none; }
+.match__result { font-size: var(--step--1); padding: var(--s3) var(--s4); border-radius: var(--radius); display: none; }
+.match__result[data-state] { display: block; }
+.match__result[data-state="right"] { background: var(--good-wash); color: var(--good); }
+.match__result[data-state="wrong"] { background: var(--bad-wash); color: var(--bad); }
+.match__result[data-state="empty"] { background: var(--note-wash); color: var(--note); }
+.match__actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
+
+/* ── HUNT (spot the bug) ──────────────────────────────────── */
+.hunt { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-lg); padding: var(--s5); box-shadow: var(--lift-1); }
+.hunt__code { background: var(--code-bg); border: 1px solid var(--code-rule); border-radius: var(--radius); overflow: hidden; margin-top: var(--s4); }
+.hunt__line {
+  display: grid; grid-template-columns: 2rem 1fr; gap: var(--s3); align-items: start;
+  width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: var(--s2) var(--s4);
+  font-family: var(--mono); font-size: var(--step--1); line-height: 1.6; color: var(--code-ink);
+}
+.hunt__line:hover { background: var(--rule-soft); }
+.hunt__n { color: var(--ink-faint); font-size: 0.6875rem; text-align: right; }
+.hunt__line code { white-space: pre-wrap; word-break: break-word; background: none; border: 0; padding: 0; }
+.hunt__line[data-verdict="right"] { background: var(--good-wash); }
+.hunt__line[data-verdict="wrong"] { background: var(--bad-wash); }
+.hunt__result { margin-top: var(--s4); padding: var(--s4); border-radius: var(--radius); font-size: var(--step--1); display: none; }
+.hunt__result[data-state] { display: block; }
+.hunt__result[data-state="right"] { background: var(--good-wash); color: var(--good); }
+.hunt__result[data-state="wrong"] { background: var(--bad-wash); color: var(--bad); }
+
+/* ── MAP (architecture) ───────────────────────────────────── */
+.map { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-lg); padding: var(--s5); box-shadow: var(--lift-1); }
+.map__zone { border: 1px dashed var(--rule); border-radius: var(--radius); padding: var(--s4); }
+.map__zone + .map__zone { margin-top: var(--s4); }
+.map__zone-name {
+  font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: var(--s3);
+}
+.map__parts { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.map__part {
+  display: grid; gap: var(--s2); justify-items: center; min-width: 6rem;
+  padding: var(--s3) var(--s4); cursor: pointer;
+  background: var(--paper); border: 1.5px solid var(--rule); border-radius: var(--radius);
+  font-family: var(--sans); font-size: 0.75rem;
+}
+.map__part[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+.map__glyph { font-size: 1.25rem; }
+.map__readout { margin-top: var(--s4); padding: var(--s4); background: var(--paper-alt); border-radius: var(--radius); font-size: var(--step--1); min-height: 3.5rem; }
+
+/* ── STACK (layer toggle) ─────────────────────────────────── */
+.stack__tabs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s4); }
+.stack__tab {
+  padding: var(--s2) var(--s4); border-radius: 8px; cursor: pointer;
+  border: 1.5px solid var(--rule); background: var(--surface);
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+}
+.stack__tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.stack__pane { padding: var(--s5); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
+.stack__pane[hidden] { display: none; }
+
+/* ── TERRITORY (the honest map: what exists, what this course covers) ── */
+.territory {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); padding: var(--s6); box-shadow: var(--lift-1);
+}
+.territory__head { margin-bottom: var(--s5); }
+.territory__title { font-family: var(--sans); font-size: var(--step-1); font-weight: 650; }
+.territory__note { font-size: var(--step--1); color: var(--ink-soft); margin-top: var(--s2); }
+.territory__rows { display: grid; gap: var(--s2); }
+.territory__row {
+  display: grid; grid-template-columns: minmax(7rem, 11rem) 1fr auto;
+  gap: var(--s4); align-items: center;
+  padding: var(--s2) var(--s3); border-radius: 8px;
+}
+.territory__row:nth-child(odd) { background: var(--paper-alt); }
+.territory__name { font-family: var(--mono); font-size: var(--step--1); font-weight: 600; }
+.territory__what { font-size: var(--step--1); color: var(--ink-soft); }
+.territory__status {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.04em; white-space: nowrap;
+  padding: 0.15rem 0.6rem; border-radius: 999px;
+}
+.territory__status--here { background: var(--accent); color: var(--accent-ink); }
+.territory__status--next { background: var(--accent-wash); color: var(--accent); }
+.territory__status--later { background: var(--rule-soft); color: var(--ink-faint); }
+
+/* ── FIELDWORK (into the real repository: do, predict, then check) ── */
+.fieldwork {
+  border: 1.5px solid var(--accent-quiet);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.fieldwork__head {
+  display: flex; align-items: baseline; gap: var(--s3);
+  padding: var(--s4) var(--s6);
+  background: var(--accent-wash);
+}
+.fieldwork__label {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+}
+.fieldwork__time { font-family: var(--sans); font-size: 0.75rem; color: var(--ink-faint); margin-left: auto; }
+.fieldwork__body { padding: var(--s5) var(--s6); background: var(--surface); }
+.fieldwork__body > * + * { margin-top: var(--s4); }
+.fieldwork__step { display: grid; grid-template-columns: 5.5rem 1fr; gap: var(--s4); font-size: var(--step--1); }
+.fieldwork__verb {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  padding-top: 0.2rem;
+}
+.fieldwork__step code { white-space: normal; word-break: break-all; }
+.fieldwork__check > summary {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: var(--s2);
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+  padding: var(--s2) var(--s4);
+  border: 1.5px solid var(--accent); border-radius: 8px; color: var(--accent);
+}
+.fieldwork__check > summary::-webkit-details-marker { display: none; }
+.fieldwork__check > summary:hover { background: var(--accent-wash); }
+.fieldwork__check[open] > summary { border-color: var(--rule); color: var(--ink-faint); }
+.fieldwork__answer { margin-top: var(--s4); font-size: var(--step--1); }
+.fieldwork__answer > * + * { margin-top: var(--s3); }
+
+/* ── RECALL (retrieval prompts, meant to be re-taken after days) ── */
+.recall {
+  background: var(--paper-alt); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); padding: var(--s6);
+}
+.recall__title { font-family: var(--sans); font-size: var(--step-1); font-weight: 650; }
+.recall__note { font-size: var(--step--1); color: var(--ink-soft); margin: var(--s2) 0 var(--s5); }
+.recall__list { display: grid; gap: var(--s3); }
+.recall__item {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: var(--s4) var(--s5);
+}
+.recall__q { font-size: var(--step-0); }
+.recall__a > summary {
+  cursor: pointer; list-style: none; margin-top: var(--s3);
+  font-family: var(--sans); font-size: 0.75rem; font-weight: 600; color: var(--ink-faint);
+}
+.recall__a > summary::-webkit-details-marker { display: none; }
+.recall__a > summary:hover { color: var(--accent); }
+.recall__a p { margin-top: var(--s2); font-size: var(--step--1); color: var(--ink-soft); }
+
+/* ── FIGURES (built to SVG at build time, themed by these tokens) ── */
+.figure { margin: 0; }
+.fig {
+  width: 100%; height: auto; display: block;
+  overflow: visible;
+  font-family: var(--sans);
+}
+.figure__caption {
+  margin-top: var(--s3);
+  font-size: var(--step--1); color: var(--ink-soft);
+  text-align: center;
+}
+.figure__alt { margin-top: var(--s2); }
+.figure__alt > summary {
+  cursor: pointer; list-style: none; text-align: center;
+  font-family: var(--sans); font-size: 0.75rem; color: var(--ink-faint);
+}
+.figure__alt > summary::-webkit-details-marker { display: none; }
+.figure__alt > summary:hover { color: var(--accent); }
+.figure__alt p {
+  margin: var(--s3) auto 0; max-width: 60ch;
+  font-size: var(--step--1); color: var(--ink-soft);
+}
+
+.fig-node, .fig-lane-head, .fig-state, .fig-state-final, .fig-selfnote {
+  fill: var(--surface); stroke: var(--rule); stroke-width: 1.5;
+}
+.fig-state-final { stroke: var(--accent); stroke-width: 2; }
+.fig-selfnote { fill: var(--paper-alt); stroke-dasharray: 4 3; }
+.fig-zone { fill: none; stroke: var(--rule); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.fig-band { fill: var(--surface); stroke: var(--rule); stroke-width: 1.5; }
+.fig-band--0 { fill: var(--paper-alt); }
+.fig-band--2 { fill: var(--accent-wash); }
+
+.fig-label {
+  fill: var(--ink); font-size: 13px; font-weight: 600;
+  font-family: var(--sans);
+}
+.fig-note, .fig-edge-label, .fig-value {
+  fill: var(--ink-faint); font-size: 11.5px; font-family: var(--sans);
+}
+.fig-value { fill: var(--ink-soft); font-weight: 600; }
+.fig-zone-label, .fig-band-label {
+  fill: var(--ink-faint); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--sans);
+}
+.fig-band-label { fill: var(--ink); font-size: 12px; }
+
+.fig-edge { stroke: var(--ink-faint); stroke-width: 1.6; fill: none; }
+.fig-edge--dashed { stroke-dasharray: 5 4; }
+.fig-arrowhead { fill: var(--ink-faint); }
+.fig-lifeline { stroke: var(--rule); stroke-width: 1.5; stroke-dasharray: 4 5; }
+
+.fig-bar { fill: var(--accent-quiet); }
+.fig-bar--lead { fill: var(--accent); }
+
+@media (max-width: 780px) {
+  /* A wide figure stays legible by scrolling itself rather than squashing. */
+  .figure { overflow-x: auto; }
+  .fig { min-width: 520px; }
+}
+
+/* ── DEPTH (layered disclosure: calm surface, real depth under it) ── */
+.depth {
+  border-left: 3px solid var(--accent-quiet);
+  padding-left: var(--s5);
+}
+.depth__short { font-size: var(--step-1); }
+.depth__more { margin-top: var(--s4); }
+.depth__more > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: var(--s2);
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+  color: var(--accent);
+  padding: var(--s2) 0;
+}
+.depth__more > summary::-webkit-details-marker { display: none; }
+.depth__more > summary::before {
+  content: "›";
+  display: inline-block; font-size: 1.1em; line-height: 1;
+  transition: transform var(--beat) var(--ease);
+}
+.depth__more[open] > summary::before { transform: rotate(90deg); }
+.depth__more > summary:hover { color: var(--accent-strong); }
+.depth__body { padding: var(--s2) 0 var(--s3) var(--s4); }
+.depth__body > * + * { margin-top: var(--s4); }
+.depth__body p { font-size: var(--step-0); }
+
+/* ── DEFEND (an expert's objection, answered) ─────────────────────── */
+.defend {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  padding: var(--s6);
+  box-shadow: var(--lift-1);
+}
+.defend__who {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint);
+  margin-bottom: var(--s3);
+}
+.defend__q {
+  font-size: var(--step-1); line-height: 1.45;
+  border-left: 3px solid var(--accent); padding-left: var(--s4);
+  margin-bottom: var(--s4);
+}
+.defend__prompt {
+  font-size: var(--step--1); color: var(--ink-faint); font-style: italic;
+  margin-bottom: var(--s3);
+}
+.defend__reveal > summary {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: var(--s2);
+  font-family: var(--sans); font-size: var(--step--1); font-weight: 600;
+  padding: var(--s2) var(--s4);
+  border: 1.5px solid var(--accent); border-radius: 8px;
+  color: var(--accent);
+}
+.defend__reveal > summary::-webkit-details-marker { display: none; }
+.defend__reveal[open] > summary { border-color: var(--rule); color: var(--ink-faint); }
+.defend__reveal > summary:hover { background: var(--accent-wash); }
+.defend__body { margin-top: var(--s5); }
+.defend__body > * + * { margin-top: var(--s4); }
+.defend__weak {
+  font-size: var(--step--1);
+  background: var(--note-wash); color: var(--note);
+  padding: var(--s3) var(--s4); border-radius: var(--radius);
+}
+
+/* ── TRADEOFF (what was chosen, and what it cost) ─────────────────── */
+.tradeoff {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--lift-1);
+}
+.tradeoff__head {
+  padding: var(--s5) var(--s6); border-bottom: 1px solid var(--rule-soft);
+  background: var(--paper-alt);
+}
+.tradeoff__label {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+  display: block; margin-bottom: var(--s2);
+}
+.tradeoff__title { font-size: var(--step-1); }
+.tradeoff__src {
+  display: inline-block; margin-top: var(--s2);
+  font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-faint);
+}
+.tradeoff__grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+}
+.tradeoff__cell {
+  padding: var(--s5) var(--s6);
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.tradeoff__cell:nth-child(2n) { border-right: 0; }
+.tradeoff__cell:nth-last-child(-n+2) { border-bottom: 0; }
+.tradeoff__cell h4 {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  margin-bottom: var(--s2);
+}
+.tradeoff__cell p { font-size: var(--step--1); }
+.tradeoff__cell--kept h4 { color: var(--good); }
+.tradeoff__cell--dropped h4 { color: var(--bad); }
+
+@media (max-width: 780px) {
+  .tradeoff__grid { grid-template-columns: 1fr; }
+  .tradeoff__cell { border-right: 0; }
+  .tradeoff__cell:nth-last-child(-n+2) { border-bottom: 1px solid var(--rule-soft); }
+  .tradeoff__cell:last-child { border-bottom: 0; }
+}
+
+/* ── ASIDES ───────────────────────────────────────────────── */
+.aside {
+  display: grid; grid-template-columns: 1.75rem 1fr; gap: var(--s4);
+  padding: var(--s5); border-radius: var(--radius);
+  border-left: 3px solid var(--accent); background: var(--accent-wash);
+}
+.aside--warn { border-left-color: var(--bad); background: var(--bad-wash); }
+.aside--myth { border-left-color: var(--bad); background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--bad); }
+.myth__wrong {
+  display: block; font-size: var(--step--1); color: var(--ink-faint);
+  text-decoration: line-through; text-decoration-color: var(--bad);
+  text-decoration-thickness: 1.5px; margin-bottom: var(--s2);
+}
+.myth__flag {
+  font-family: var(--sans); font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--bad);
+}
+.aside--note { border-left-color: var(--note); background: var(--note-wash); }
+.aside__glyph { font-size: 1.15rem; line-height: 1.4; }
+.aside__title { display: block; font-family: var(--sans); font-weight: 700; font-size: var(--step--1); margin-bottom: var(--s1); }
+.aside p { font-size: var(--step--1); }
+
+/* ── VISUAL LISTS ─────────────────────────────────────────── */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--s4); }
+.card {
+  padding: var(--s5); background: var(--surface);
+  border: 1px solid var(--rule); border-top: 3px solid var(--accent);
+  border-radius: var(--radius); box-shadow: var(--lift-1);
+}
+.card__glyph { font-size: 1.35rem; display: block; margin-bottom: var(--s3); }
+.card__title { font-family: var(--sans); font-size: var(--step-0); font-weight: 650; margin-bottom: var(--s2); }
+.card p { font-size: var(--step--1); color: var(--ink-soft); }
+
+.steps { display: grid; gap: var(--s3); counter-reset: step; }
+.step {
+  display: grid; grid-template-columns: 2rem 1fr; gap: var(--s4); align-items: start;
+  counter-increment: step;
+  padding: var(--s4) var(--s5); background: var(--surface);
+  border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+}
+.step::before {
+  content: counter(step);
+  inline-size: 1.75rem; block-size: 1.75rem; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  font-family: var(--sans); font-size: 0.8125rem; font-weight: 700;
+}
+.step strong { font-family: var(--sans); font-size: var(--step-0); }
+.step p { font-size: var(--step--1); color: var(--ink-soft); margin-top: var(--s1); }
+
+.rows { display: grid; gap: var(--s3); }
+.row {
+  display: grid; grid-template-columns: 2.5rem 1fr; gap: var(--s4); align-items: center;
+  padding: var(--s4); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: var(--radius);
+}
+.row__glyph {
+  inline-size: 2.5rem; block-size: 2.5rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: 1.1rem;
+  background: var(--accent-wash);
+}
+.row strong { font-family: var(--sans); }
+.row p { font-size: var(--step--1); color: var(--ink-soft); }
+
+.tree { font-family: var(--mono); font-size: var(--step--1); display: grid; gap: var(--s1); }
+.tree__item { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: var(--s4); padding: var(--s2) var(--s3); border-left: 2px solid var(--rule); }
+.tree__item[data-depth="1"] { margin-left: var(--s5); }
+.tree__item[data-depth="2"] { margin-left: var(--s7); }
+.tree__name { color: var(--accent); font-weight: 600; }
+.tree__what { font-family: var(--serif); color: var(--ink-soft); }
+
+/* ── COLOPHON ─────────────────────────────────────────────── */
+.u-colophon {
+  padding: var(--s6);
+  text-align: center;
+  font-family: var(--sans); font-size: 0.75rem; color: var(--ink-faint);
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .u-rail {
+    position: static; inline-size: auto; block-size: auto;
+    border-right: 0; border-bottom: 1px solid var(--rule-soft);
+    padding: var(--s4);
+    display: flex; align-items: center; gap: var(--s4);
+    position: sticky; top: 0;
+  }
+  .u-rail__title { margin: 0; white-space: nowrap; }
+  .u-rail__list { display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; }
+  .u-rail__list::-webkit-scrollbar { display: none; }
+  .u-rail__link { grid-template-columns: auto; white-space: nowrap; }
+  .u-rail__label { display: none; }
+  .u-rail__num { font-size: var(--step-0); }
+  .u-main { margin-left: 0; }
+}
+
+@media (max-width: 780px) {
+  :root { --step-4: 2.1rem; --step-3: 1.6rem; --step-2: 1.3rem; }
+  .chapter { padding: var(--s7) var(--s4); }
+  .annotated { grid-template-columns: 1fr; }
+  .annotated__pane--code { border-right: 0; border-bottom: 1px solid var(--code-rule); }
+  .match__row { grid-template-columns: 1fr; }
+  .check { padding: var(--s4); }
+}
+
+/* ── PRINT ────────────────────────────────────────────────── */
+@media print {
+  .u-rail, .u-progress, .trace__controls, .thread__controls, .check__actions, .match__actions { display: none; }
+  .u-main { margin: 0; }
+  .chapter { break-inside: avoid-page; padding: var(--s5) 0; }
+  .js .u-reveal { opacity: 1; transform: none; }
+  .thread__msg[hidden] { display: grid !important; }
+}
+
+</style>
+<style>
+  :root {
+    --accent:        #0F6F76;
+    --accent-strong: #0A565C;
+    --accent-wash:   #E4F1F1;
+    --accent-quiet:  #7FB3B6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent:        #238D95;
+      --accent-strong: #41A3AA;
+      --accent-wash:   #10262A;
+      --accent-quiet:  #41A3AA;
+      --accent-ink:    #0F1115;
+    }
+  }
+</style>
+<script>
+/* ============================================================
+   UNDERSTORY — course engine
+   Copy verbatim into a course. Never hand-edit.
+
+   Two rules make this hard to break from markup:
+     1. Nothing is wired by inline onclick. Every component is
+        found by its data-u attribute, so markup cannot call a
+        function that does not exist.
+     2. Every component instance is looked up and initialised
+        inside its own container, in its own try/catch. One bad
+        instance cannot take down the others.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function one(sel, root) { return (root || document).querySelector(sel); }
+  function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
+
+  var parts = {};
+  function part(name, fn) { parts[name] = fn; }
+
+  function boot() {
+    document.documentElement.classList.add("js");
+    Object.keys(parts).forEach(function (name) {
+      all('[data-u="' + name + '"]').forEach(function (el, i) {
+        try {
+          parts[name](el);
+        } catch (err) {
+          console.error("[understory] " + name + " #" + (i + 1) + " failed to start:", err);
+        }
+      });
+    });
+  }
+
+  /* ── RAIL & PROGRESS ────────────────────────────────────── */
+  part("rail", function (rail) {
+    var links = all("[data-u-goto]", rail);
+    var bar = one('[data-u="progress"]');
+    var chapters = links
+      .map(function (l) { return document.getElementById(l.getAttribute("data-u-goto")); })
+      .filter(Boolean);
+
+    links.forEach(function (link) {
+      on(link, "click", function () {
+        var target = document.getElementById(link.getAttribute("data-u-goto"));
+        if (target) target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+      });
+    });
+
+    function paint() {
+      var doc = document.documentElement;
+      var scrollable = doc.scrollHeight - window.innerHeight;
+      if (bar) bar.style.width = (scrollable > 0 ? (window.scrollY / scrollable) * 100 : 0) + "%";
+
+      var mid = window.scrollY + window.innerHeight / 2;
+      chapters.forEach(function (chapter, i) {
+        var link = links[i];
+        var top = chapter.offsetTop;
+        var bottom = top + chapter.offsetHeight;
+        var current = mid >= top && mid < bottom;
+        link.setAttribute("aria-current", current ? "true" : "false");
+        link.setAttribute("data-seen", window.scrollY + window.innerHeight > top ? "true" : "false");
+        if (current) link.scrollIntoView({ block: "nearest", inline: "nearest" });
+      });
+    }
+
+    var ticking = false;
+    on(window, "scroll", function () {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(function () { paint(); ticking = false; });
+    });
+    on(window, "resize", paint);
+    paint();
+
+    on(document, "keydown", function (e) {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.metaKey || e.ctrlKey) return;
+      var step = e.key === "j" || e.key === "J" ? 1 : (e.key === "k" || e.key === "K" ? -1 : 0);
+      if (!step) return;
+      var mid = window.scrollY + window.innerHeight / 2;
+      var at = 0;
+      chapters.forEach(function (c, i) { if (mid >= c.offsetTop) at = i; });
+      var next = chapters[at + step];
+      if (next) { next.scrollIntoView({ behavior: reduced ? "auto" : "smooth" }); e.preventDefault(); }
+    });
+  });
+
+  /* ── REVEAL ─────────────────────────────────────────────── */
+  function revealAll() { all(".u-reveal").forEach(function (el) { el.classList.add("is-in"); }); }
+
+  function startReveal() {
+    if (reduced || !("IntersectionObserver" in window)) { revealAll(); return; }
+    try {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-in");
+          io.unobserve(entry.target);
+        });
+      }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
+      all(".u-reveal").forEach(function (el) { io.observe(el); });
+    } catch (err) {
+      console.error("[understory] reveal failed, showing everything:", err);
+      revealAll();
+    }
+  }
+
+  /* ── GLOSS ──────────────────────────────────────────────── */
+  var popoverOK = typeof HTMLElement !== "undefined" && "popover" in HTMLElement.prototype;
+
+  part("gloss", function (term) {
+    var def = document.getElementById(term.getAttribute("popovertarget") || "");
+    if (!def) return;
+
+    function place() {
+      var a = term.getBoundingClientRect();
+      var d = def.getBoundingClientRect();
+      var left = Math.min(Math.max(8, a.left + a.width / 2 - d.width / 2), window.innerWidth - d.width - 8);
+      var above = a.top - d.height - 10;
+      def.style.left = left + "px";
+      def.style.top = (above > 8 ? above : a.bottom + 10) + "px";
+    }
+
+    if (popoverOK) {
+      on(def, "toggle", function (e) { if (e.newState === "open") place(); });
+      on(window, "resize", function () { if (def.matches(":popover-open")) place(); });
+      return;
+    }
+
+    // Older engines: same behaviour, manual show/hide.
+    def.style.display = "none";
+    function show() { def.style.display = "block"; place(); }
+    function hide() { def.style.display = "none"; }
+    on(term, "click", function (e) {
+      e.stopPropagation();
+      def.style.display === "block" ? hide() : show();
+    });
+    on(document, "click", hide);
+    on(document, "keydown", function (e) { if (e.key === "Escape") hide(); });
+  });
+
+  /* ── CHECK (quiz) ───────────────────────────────────────── */
+  part("check", function (check) {
+    all("[data-u-question]", check).forEach(function (q) {
+      var opts = all("[data-u-answer]", q);
+      var result = one("[data-u-result]", q);
+      opts.forEach(function (opt) {
+        opt.setAttribute("aria-pressed", "false");
+        on(opt, "click", function () {
+          opts.forEach(function (o) { o.setAttribute("aria-pressed", "false"); });
+          opt.setAttribute("aria-pressed", "true");
+        });
+      });
+    });
+
+    on(one("[data-u-mark]", check), "click", function () {
+      all("[data-u-question]", check).forEach(function (q) {
+        var opts = all("[data-u-answer]", q);
+        var picked = opts.filter(function (o) { return o.getAttribute("aria-pressed") === "true"; })[0];
+        var result = one("[data-u-result]", q);
+        var right = q.getAttribute("data-u-correct");
+
+        if (!picked) {
+          if (result) {
+            result.textContent = "Pick an answer first.";
+            result.setAttribute("data-state", "empty");
+          }
+          return;
+        }
+        opts.forEach(function (o) { o.disabled = true; });
+        var won = picked.getAttribute("data-u-answer") === right;
+        picked.setAttribute("data-verdict", won ? "right" : "wrong");
+        if (!won) {
+          opts.forEach(function (o) {
+            if (o.getAttribute("data-u-answer") === right) o.setAttribute("data-verdict", "right");
+          });
+        }
+        if (result) {
+          result.textContent = (won ? "Yes. " : "Not quite. ") +
+            (q.getAttribute(won ? "data-u-if-right" : "data-u-if-wrong") || "");
+          result.setAttribute("data-state", won ? "right" : "wrong");
+        }
+      });
+    });
+
+    on(one("[data-u-again]", check), "click", function () {
+      all("[data-u-answer]", check).forEach(function (o) {
+        o.disabled = false;
+        o.setAttribute("aria-pressed", "false");
+        o.removeAttribute("data-verdict");
+      });
+      all("[data-u-result]", check).forEach(function (r) {
+        r.textContent = "";
+        r.removeAttribute("data-state");
+      });
+    });
+  });
+
+  /* ── TRACE (step-through flow) ──────────────────────────── */
+  part("trace", function (trace) {
+    var steps = [];
+    try {
+      steps = JSON.parse(trace.getAttribute("data-u-steps") || "[]");
+    } catch (err) {
+      console.error("[understory] trace steps are not valid JSON — an apostrophe inside a " +
+                    "single-quoted attribute is the usual cause:", err);
+    }
+
+    var caption = one("[data-u-caption]", trace);
+    var counter = one("[data-u-count]", trace);
+    var pulse = one("[data-u-pulse]", trace);
+    var at = 0;
+
+    // Nodes are resolved inside this container only, so two traces on one
+    // page may use the same node names without colliding.
+    function node(name) { return name ? one('[data-u-node="' + name + '"]', trace) : null; }
+
+    function count() { if (counter) counter.textContent = at + " / " + steps.length; }
+
+    function sendPulse(fromName, toName) {
+      var from = node(fromName), to = node(toName);
+      if (!pulse || !from || !to) {
+        if (!from || !to) console.warn("[understory] trace: no node named", fromName, "or", toName);
+        return;
+      }
+      if (reduced) return;
+      var box = trace.getBoundingClientRect();
+      var a = from.getBoundingClientRect();
+      var b = to.getBoundingClientRect();
+      pulse.style.setProperty("--from-x", (a.left + a.width / 2 - box.left) + "px");
+      pulse.style.setProperty("--from-y", (a.top + a.height / 2 - box.top) + "px");
+      pulse.style.setProperty("--to-x", (b.left + b.width / 2 - box.left) + "px");
+      pulse.style.setProperty("--to-y", (b.top + b.height / 2 - box.top) + "px");
+      pulse.classList.remove("is-moving");
+      void pulse.offsetWidth;
+      pulse.classList.add("is-moving");
+    }
+
+    function advance() {
+      if (at >= steps.length) return;
+      var step = steps[at];
+      all("[data-u-node]", trace).forEach(function (n) { n.setAttribute("data-lit", "false"); });
+      var lit = node(step.at);
+      if (lit) lit.setAttribute("data-lit", "true");
+      else if (step.at) console.warn("[understory] trace: no node named", step.at);
+      if (step.from && step.to) sendPulse(step.from, step.to);
+      if (caption) caption.textContent = step.say || "";
+      at++;
+      count();
+    }
+
+    on(one("[data-u-next]", trace), "click", advance);
+    on(one("[data-u-restart]", trace), "click", function () {
+      at = 0;
+      all("[data-u-node]", trace).forEach(function (n) { n.setAttribute("data-lit", "false"); });
+      if (caption) caption.textContent = caption.getAttribute("data-u-idle") || "";
+      count();
+    });
+    count();
+  });
+
+  /* ── THREAD (component dialogue) ────────────────────────── */
+  part("thread", function (thread) {
+    var msgs = all("[data-u-msg]", thread);
+    var typing = one("[data-u-typing]", thread);
+    var typingWho = one("[data-u-typing-who]", thread);
+    var counter = one("[data-u-count]", thread);
+    var at = 0;
+    var timer = null;
+
+    function count() { if (counter) counter.textContent = at + " / " + msgs.length; }
+
+    function reveal(msg) {
+      msg.hidden = false;
+      if (!reduced) {
+        msg.classList.add("is-new");
+        setTimeout(function () { msg.classList.remove("is-new"); }, 320);
+      }
+      at++;
+      count();
+    }
+
+    function next() {
+      if (at >= msgs.length) return false;
+      var msg = msgs[at];
+      var who = one("[data-u-who]", msg);
+      if (typing && !reduced) {
+        if (typingWho && who) {
+          typingWho.textContent = who.textContent.trim();
+          typingWho.style.background = who.style.background;
+        }
+        typing.hidden = false;
+        setTimeout(function () { typing.hidden = true; reveal(msg); }, 650);
+      } else {
+        reveal(msg);
+      }
+      return true;
+    }
+
+    function reset() {
+      if (timer) { clearInterval(timer); timer = null; }
+      at = 0;
+      msgs.forEach(function (m) { m.hidden = true; });
+      if (typing) typing.hidden = true;
+      count();
+    }
+
+    on(one("[data-u-next]", thread), "click", next);
+    on(one("[data-u-playall]", thread), "click", function () {
+      if (timer) return;
+      timer = setInterval(function () {
+        if (!next()) { clearInterval(timer); timer = null; }
+      }, reduced ? 120 : 1000);
+    });
+    on(one("[data-u-restart]", thread), "click", reset);
+
+    msgs.forEach(function (m) { m.hidden = true; });
+    count();
+  });
+
+  /* ── MATCH (drag, drop, or tap) ─────────────────────────── */
+  part("match", function (match) {
+    var chips = all("[data-u-chip]", match);
+    var slots = all("[data-u-slot]", match);
+    var result = one("[data-u-result]", match);
+    var armed = null;
+
+    function place(slot, chip) {
+      slot.textContent = chip.textContent;
+      slot.setAttribute("data-u-holds", chip.getAttribute("data-u-chip"));
+      slot.removeAttribute("data-verdict");
+      chip.setAttribute("data-used", "true");
+      if (armed) { armed.classList.remove("is-armed"); armed = null; }
+    }
+
+    function chipFor(key) {
+      return chips.filter(function (c) { return c.getAttribute("data-u-chip") === key; })[0];
+    }
+
+    chips.forEach(function (chip) {
+      chip.setAttribute("draggable", "true");
+
+      on(chip, "dragstart", function (e) {
+        e.dataTransfer.setData("text/plain", chip.getAttribute("data-u-chip"));
+        chip.classList.add("is-lifted");
+      });
+      on(chip, "dragend", function () { chip.classList.remove("is-lifted"); });
+
+      // Tap-to-place: works on touch, and is the keyboard path too.
+      on(chip, "click", function () {
+        if (armed === chip) { chip.classList.remove("is-armed"); armed = null; return; }
+        if (armed) armed.classList.remove("is-armed");
+        armed = chip;
+        chip.classList.add("is-armed");
+      });
+    });
+
+    slots.forEach(function (slot) {
+      on(slot, "dragover", function (e) { e.preventDefault(); slot.classList.add("is-over"); });
+      on(slot, "dragleave", function () { slot.classList.remove("is-over"); });
+      on(slot, "drop", function (e) {
+        e.preventDefault();
+        slot.classList.remove("is-over");
+        var chip = chipFor(e.dataTransfer.getData("text/plain"));
+        if (chip) place(slot, chip);
+      });
+      on(slot, "click", function () { if (armed) place(slot, armed); });
+      on(slot, "keydown", function (e) {
+        if ((e.key === "Enter" || e.key === " ") && armed) { e.preventDefault(); place(slot, armed); }
+      });
+    });
+
+    on(one("[data-u-mark]", match), "click", function () {
+      var filled = 0, right = 0;
+      slots.forEach(function (slot) {
+        var holds = slot.getAttribute("data-u-holds");
+        if (!holds) return;
+        filled++;
+        var ok = holds === slot.getAttribute("data-u-slot");
+        slot.setAttribute("data-verdict", ok ? "right" : "wrong");
+        if (ok) right++;
+      });
+      if (!result) return;
+      if (!filled) {
+        result.textContent = "Put a chip in a slot first.";
+        result.setAttribute("data-state", "empty");
+      } else if (right === slots.length) {
+        result.textContent = "All " + slots.length + " matched.";
+        result.setAttribute("data-state", "right");
+      } else {
+        result.textContent = right + " of " + slots.length + " matched — the red ones are worth another look.";
+        result.setAttribute("data-state", "wrong");
+      }
+    });
+
+    on(one("[data-u-again]", match), "click", function () {
+      slots.forEach(function (slot) {
+        slot.textContent = slot.getAttribute("data-u-empty") || "Drop or tap here";
+        slot.removeAttribute("data-u-holds");
+        slot.removeAttribute("data-verdict");
+      });
+      chips.forEach(function (c) { c.removeAttribute("data-used"); c.classList.remove("is-armed"); });
+      if (armed) { armed = null; }
+      if (result) { result.textContent = ""; result.removeAttribute("data-state"); }
+    });
+  });
+
+  /* ── HUNT (spot the bug) ────────────────────────────────── */
+  part("hunt", function (hunt) {
+    var lines = all("[data-u-line]", hunt);
+    var result = one("[data-u-result]", hunt);
+
+    lines.forEach(function (line) {
+      on(line, "click", function () {
+        var isBug = line.getAttribute("data-u-line") === "bug";
+        if (isBug) {
+          line.setAttribute("data-verdict", "right");
+          lines.forEach(function (l) { l.disabled = true; });
+          if (result) {
+            result.textContent = "Found it. " + (line.getAttribute("data-u-why") || "");
+            result.setAttribute("data-state", "right");
+          }
+        } else {
+          line.setAttribute("data-verdict", "wrong");
+          if (result) {
+            result.textContent = line.getAttribute("data-u-why") || "Not this line — keep looking.";
+            result.setAttribute("data-state", "wrong");
+          }
+          setTimeout(function () {
+            line.removeAttribute("data-verdict");
+            if (result) result.removeAttribute("data-state");
+          }, 2200);
+        }
+      });
+    });
+  });
+
+  /* ── MAP (architecture) ─────────────────────────────────── */
+  part("map", function (map) {
+    var partsList = all("[data-u-part]", map);
+    var readout = one("[data-u-readout]", map);
+    partsList.forEach(function (item) {
+      item.setAttribute("aria-pressed", "false");
+      on(item, "click", function () {
+        partsList.forEach(function (p) { p.setAttribute("aria-pressed", "false"); });
+        item.setAttribute("aria-pressed", "true");
+        if (readout) readout.textContent = item.getAttribute("data-u-part") || "";
+      });
+    });
+  });
+
+  /* ── STACK (layer toggle) ───────────────────────────────── */
+  part("stack", function (stack) {
+    var tabs = all("[data-u-tab]", stack);
+    tabs.forEach(function (tab) {
+      on(tab, "click", function () {
+        tabs.forEach(function (t) {
+          var pane = one('[data-u-pane="' + t.getAttribute("data-u-tab") + '"]', stack);
+          var chosen = t === tab;
+          t.setAttribute("aria-selected", chosen ? "true" : "false");
+          if (pane) pane.hidden = !chosen;
+        });
+      });
+      on(tab, "keydown", function (e) {
+        var i = tabs.indexOf(tab);
+        var to = e.key === "ArrowRight" ? tabs[i + 1] : (e.key === "ArrowLeft" ? tabs[i - 1] : null);
+        if (to) { e.preventDefault(); to.focus(); to.click(); }
+      });
+    });
+  });
+
+  /* ── GO ─────────────────────────────────────────────────── */
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { boot(); startReveal(); });
+  } else {
+    boot();
+    startReveal();
+  }
+})();
+
+</script>
+</head>
+<body>
+
+<div class="u-progress" data-u="progress" role="progressbar" aria-label="Reading progress"></div>
+
+<nav class="u-rail" data-u="rail" aria-label="Chapters">
+  <span class="u-rail__title">How micrograd Works</span>
+  <ul class="u-rail__list">
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-1" aria-current="false"><span class="u-rail__num">01</span><span class="u-rail__label">What it is</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-2" aria-current="false"><span class="u-rail__num">02</span><span class="u-rail__label">The cast</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-3" aria-current="false"><span class="u-rail__num">03</span><span class="u-rail__label">Forward pass</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-4" aria-current="false"><span class="u-rail__num">04</span><span class="u-rail__label">Backpropagation</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-5" aria-current="false"><span class="u-rail__num">05</span><span class="u-rail__label">When it breaks</span></button></li>
+  </ul>
+</nav>
+
+<main class="u-main">
+<section class="chapter" id="ch-1" data-u-short="What it is">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 01</span>
+      <h1 class="chapter__title">The hundred lines that learn</h1>
+      <p class="chapter__lede">What micrograd is, and what happens in the instant you write <code>a + b</code>.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">What this thing is</h2>
+        <p>micrograd is a miniature version of the machinery inside PyTorch — the software that trains almost every <button class="gloss" type="button" popovertarget="g-neural-network">neural network</button><span class="gloss-def" popover id="g-neural-network">A stack of simple arithmetic operations whose numbers get nudged, over and over, until the stack produces useful answers. Not a brain — a very large dial-tuning machine.</span> you have used. It fits in about 150 lines of Python.</p>
+        <p>It exists to answer one question, millions of times a second: <em>which dial should I turn, and which way, to make this answer less wrong?</em></p>
+      </section>
+
+      <div class="rows u-reveal">
+        <div class="row"><span class="row__glyph" aria-hidden="true">🧮</span><div><strong>engine.py — about 100 lines</strong><p>One class called Value: a single number that remembers where it came from</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">🕸️</span><div><strong>nn.py — about 60 lines</strong><p>Neuron, Layer and MLP — a whole neural network built out of nothing but Values</p></div></div>
+        <div class="row"><span class="row__glyph" aria-hidden="true">📓</span><div><strong>demo.ipynb</strong><p>A worked example that teaches the network to separate two interleaving spirals of dots</p></div></div>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A trail of breadcrumbs</h2>
+        <p>In ordinary Python, <code>4 + 2</code> gives you <code>6</code>, and the 4 and the 2 are gone. The answer has no memory of its parents.</p>
+        <p>micrograd refuses to forget. Every result keeps a pointer back to the numbers that made it — breadcrumbs dropped on the way out, so the trail can be walked backwards later.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 13-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__add__</span>(self, other):</span>
+<span class="cl">        other = other <span class="t-key">if</span> <span class="t-fn">isinstance</span>(other, Value) <span class="t-key">else</span> <span class="t-fn">Value</span>(other)</span>
+<span class="cl">        out = <span class="t-fn">Value</span>(self.data + other.data, (self, other), <span class="t-str">'+'</span>)</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">def</span> <span class="t-fn">_backward</span>():</span>
+<span class="cl">            self.grad += out.grad</span>
+<span class="cl">            other.grad += out.grad</span>
+<span class="cl">        out._backward = _backward</span>
+<span class="cl"></span>
+<span class="cl">        <span class="t-key">return</span> out</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>This runs every time you write <code>a + b</code> and <code>a</code> is one of micrograd's numbers.</li>
+            <li>If you added a plain <code>2</code>, quietly wrap it first, so everything downstream can assume it is dealing with the same kind of thing.</li>
+            <li>Make the answer — and notice it stores three things, not one: the sum, <em>who its two parents were</em>, and the label <code>'+'</code>.</li>
+            <li>Now write the note-to-self: when someone eventually tells me how much I mattered, here is how I pass that message back to my parents.</li>
+            <li>For addition the answer is beautifully lazy. Nudge the sum up by one and each input contributed exactly one, so both parents get the message unchanged.</li>
+            <li>Staple that note to the answer and hand it back.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">A function that outlives the one that made it</strong>
+          <p>A function defined inside another function, still alive after the outer one has finished, is called a <button class="gloss" type="button" popovertarget="g-closure">closure</button><span class="gloss-def" popover id="g-closure">A function that remembers the variables that surrounded it when it was created, even after that surrounding code has finished. Here, <b>_backward</b> still remembers self, other and out long after __add__ returned.</span>. It is what lets a result carry its own instructions for undoing itself.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"a","say":"You write d = a * b + c. Python evaluates the multiplication first."},
+        {"at":"mul","from":"a","to":"mul","say":"a and b meet in __mul__, and a new number appears holding 8.0."},
+        {"at":"mul","say":"That new number is labelled * and remembers a and b as its parents."},
+        {"at":"add","from":"mul","to":"add","say":"Now the addition runs: the temporary node meets c."},
+        {"at":"d","from":"add","to":"d","say":"d is born holding 18.0, labelled +, with the whole family tree hanging beneath it."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>Value(4.0)</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>a * b = 8.0</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d = 18.0</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Step through what Python builds when you write one short line.">Step through what Python builds when you write one short line.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>Python evaluates <code>a * b</code> first, making a new number that remembers a and b.</li>
+          <li>That temporary number is then added to c, making a third number.</li>
+          <li><code>d</code> holds 18.0 and the entire family tree hangs beneath it.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <p>That family tree has a name engineers use constantly: a <button class="gloss" type="button" popovertarget="g-dag">DAG</button><span class="gloss-def" popover id="g-dag">Directed acyclic graph: a set of things joined by one-way arrows, with no way to loop back to where you started. A family tree is one; a circular argument is not.</span>. Saying "micrograd builds a DAG of scalar operations" to an assistant gets you a far more precise answer than "it does the maths thing".</p>
+      </section>
+
+      <div class="territory u-reveal">
+        <div class="territory__head">
+          <h3 class="territory__title">The whole territory, honestly</h3>
+          <p class="territory__note">Small enough to map completely: two files walked here, two routed.</p>
+        </div>
+        <div class="territory__rows">
+          <div class="territory__row"><span class="territory__name">engine.py · 94 lines</span><span class="territory__what">The Value class — every idea in chapters one and four</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">nn.py · 60 lines</span><span class="territory__what">Neuron, Layer, MLP — chapters two and three</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">test_engine.py</span><span class="territory__what">Proves correctness by cross-checking against PyTorch</span><span class="territory__status territory__status--next">fieldwork, ch. 5</span></div>
+          <div class="territory__row"><span class="territory__name">demo.ipynb</span><span class="territory__what">Trains a real classifier on two spirals of dots</span><span class="territory__status territory__status--later">on your own</span></div>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Scalars, not tensors — every number is its own object</h3>
+          <span class="tradeoff__src">README.md — "The DAG only operates over scalar values… potentially useful for educational purposes"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>One Value per number; a neuron becomes visible adds and multiplies.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>Tensors — whole grids of numbers moved at once, the way every production framework works.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Speed, catastrophically — an object and two closures per operation.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never — the README says educational. When speed matters, the answer is PyTorch.</p></div>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The wrapping trick has a mirror image: it also works when the plain number comes <em>first</em>.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Write <code>2 * x</code> and Python asks the number 2 to multiply first — and 2 has never heard of Value. Python then tries the reflected version, <code>__rmul__</code>, on <code>x</code>, and engine.py defines the full set: <code>__radd__</code>, <code>__rsub__</code>, <code>__rmul__</code>, <code>__rtruediv__</code>. Each just flips the operands and reuses the normal path, so both orderings build the same graph.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A performance-minded engineer</p>
+        <blockquote class="defend__q">An object allocation and two closures for every single addition? This is the least efficient arithmetic ever written. Why would anyone study code that no one would ever ship?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Because the inefficiency is the pedagogy. PyTorch does conceptually identical bookkeeping — a graph of operations, each remembering its inputs and how to push gradients back — but buried in C++ and batched over tensors, where no one can watch it happen. micrograd unrolls the same machine into 94 readable lines. You study it precisely because it makes the invisible thing visible; you ship the other one.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it could be optimised later". The follow-up is <em>then why hasn't anyone?</em> — the honest position is that its slowness is a deliberate, stated trade for legibility, not a gap waiting for a patch.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The link back to the parents is the entire product. Without it there is a number, but no way to work out what to change."
+             data-u-if-wrong="Plain Python already computes the same number, and faster. So whatever makes micrograd special, it is not the arithmetic.">
+          <h3 class="check__ask">You ask an assistant to speed micrograd up by storing only the numbers and dropping the references to their parents. What breaks?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — same answers, less memory</button>
+            <button class="check__opt" type="button" data-u-answer="b">Learning breaks: with no trail back to the inputs, nothing can work out which dial to turn</button>
+            <button class="check__opt" type="button" data-u-answer="c">Addition breaks but multiplication keeps working</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Every operation in engine.py opens with that same defensive line, which is why mixing plain numbers and Values just works."
+             data-u-if-wrong="Look again at the second line of __add__ — it deals with this case before any arithmetic happens.">
+          <h3 class="check__ask">Your code does <code>x + 1</code>, where <code>x</code> is a Value and <code>1</code> is an ordinary number. What happens?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It fails — you can only add a Value to a Value</button>
+            <button class="check__opt" type="button" data-u-answer="b">The 1 is ignored and you get x back</button>
+            <button class="check__opt" type="button" data-u-answer="c">The 1 is wrapped into a Value automatically, then the normal addition runs</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-2" data-u-short="The cast">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 02</span>
+      <h1 class="chapter__title">Meet the cast</h1>
+      <p class="chapter__lede">Four characters, each one built out of the one below it.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Nesting dolls, not an org chart</h2>
+        <p>In most software the parts sit beside each other and send messages. Here they sit <em>inside</em> each other, like nesting dolls.</p>
+        <p>Open the network and you find layers. Open a layer and you find neurons. Open a neuron and it is Values all the way down.</p>
+      </section>
+
+      <div class="map u-reveal" data-u="map">
+        <div class="map__zone">
+          <span class="map__zone-name">nn.py — the network</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="MLP: the whole network. Holds a list of layers and pushes your input through each one in turn. This is the object you actually call."><span class="map__glyph" aria-hidden="true">🧠</span><span>MLP</span></button>
+            <button class="map__part" type="button" data-u-part="Layer: a row of neurons that all read the same input. Its only job is to call each neuron and collect the answers."><span class="map__glyph" aria-hidden="true">📚</span><span>Layer</span></button>
+            <button class="map__part" type="button" data-u-part="Neuron: holds one weight per input, plus a bias. Multiplies, sums, and optionally flattens the negative half away."><span class="map__glyph" aria-hidden="true">⚫</span><span>Neuron</span></button>
+          </div>
+        </div>
+        <div class="map__zone">
+          <span class="map__zone-name">engine.py — the arithmetic</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="Value: one number, its gradient, its parents, and the note explaining how to pass credit back to those parents. Everything above is made of these."><span class="map__glyph" aria-hidden="true">🔢</span><span>Value</span></button>
+            <button class="map__part" type="button" data-u-part="Module: a two-method base class. It gives the other three a shared list of parameters and a way to wipe every gradient back to zero."><span class="map__glyph" aria-hidden="true">🧩</span><span>Module</span></button>
+          </div>
+        </div>
+        <p class="map__readout" data-u-readout role="status" aria-live="polite">Pick a piece to see what it is responsible for.</p>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One neuron, in full</h2>
+        <p>A neuron sounds mystical. It is four lines of arithmetic and one decision.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 15-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__init__</span>(self, nin, nonlin=<span class="t-key">True</span>):</span>
+<span class="cl">        self.w = [<span class="t-fn">Value</span>(random.<span class="t-fn">uniform</span>(<span class="t-num">-1</span>,<span class="t-num">1</span>)) <span class="t-key">for</span> _ <span class="t-key">in</span> <span class="t-fn">range</span>(nin)]</span>
+<span class="cl">        self.b = <span class="t-fn">Value</span>(<span class="t-num">0</span>)</span>
+<span class="cl">        self.nonlin = nonlin</span>
+<span class="cl"></span>
+<span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        act = <span class="t-fn">sum</span>((wi*xi <span class="t-key">for</span> wi,xi <span class="t-key">in</span> <span class="t-fn">zip</span>(self.w, x)), self.b)</span>
+<span class="cl">        <span class="t-key">return</span> act.<span class="t-fn">relu</span>() <span class="t-key">if</span> self.nonlin <span class="t-key">else</span> act</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>Set up a neuron that expects a certain number of inputs.</li>
+            <li>Give it one <button class="gloss" type="button" popovertarget="g-weight">weight</button><span class="gloss-def" popover id="g-weight">A dial controlling how much one input matters to this neuron. Training is nothing more than turning these dials a little at a time.</span> per input, each starting somewhere random between -1 and 1. Random, because identical starting dials would make every neuron learn the identical thing.</li>
+            <li>Add a <button class="gloss" type="button" popovertarget="g-bias">bias</button><span class="gloss-def" popover id="g-bias">A constant the neuron adds no matter what the inputs are. It shifts the threshold, letting the neuron fire more or less eagerly.</span> starting at zero — its opinion before it has seen anything.</li>
+            <li>Remember whether this neuron should flatten its output or pass it through raw.</li>
+            <li>This is what runs when you treat the neuron like a function and write <code>n(x)</code>.</li>
+            <li>Pair each input with its weight, multiply, and total them up — starting the running total <em>at the bias</em> rather than at zero. That detail is why the bias needs no line of its own.</li>
+            <li>Optionally pass the result through <button class="gloss" type="button" popovertarget="g-relu">ReLU</button><span class="gloss-def" popover id="g-relu">A rule that says: if the number is negative, make it zero; otherwise leave it alone. That single kink is what lets stacked layers learn curved patterns instead of only straight lines.</span>. Without that kink, stacking a hundred layers would still only ever draw a straight line.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="match u-reveal" data-u="match">
+        <div class="match__chips">
+          <button class="match__chip" type="button" data-u-chip="value">Value</button>
+          <button class="match__chip" type="button" data-u-chip="neuron">Neuron</button>
+          <button class="match__chip" type="button" data-u-chip="layer">Layer</button>
+          <button class="match__chip" type="button" data-u-chip="mlp">MLP</button>
+        </div>
+        <div class="match__slots">
+          <div class="match__row">
+            <p class="match__prompt">Remembers one number, who made it, and how to pass credit back</p>
+            <button class="match__slot" type="button" data-u-slot="value" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Weighs each input, totals them with a bias, optionally clips at zero</p>
+            <button class="match__slot" type="button" data-u-slot="neuron" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Runs a row of those on the same input and collects the answers</p>
+            <button class="match__slot" type="button" data-u-slot="layer" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Feeds the output of one stage into the next, front to back</p>
+            <button class="match__slot" type="button" data-u-slot="mlp" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+        </div>
+        <p class="match__result" data-u-result role="status" aria-live="polite"></p>
+        <div class="match__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check matches</button>
+          <button class="btn" type="button" data-u-again>Reset</button>
+        </div>
+      </div>
+
+      <figure class="figure u-reveal"><svg class="fig" viewBox="0 0 963 150" role="img" aria-labelledby="fig-composition-t fig-composition-d" preserveAspectRatio="xMidYMid meet"><title id="fig-composition-t">What each piece is built from</title><desc id="fig-composition-d">A Value is one remembering number. Many Values make a Neuron. A row of Neurons makes a Layer. Stacked Layers make the MLP you actually call.</desc><defs><marker id="fig-composition-tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="fig-arrowhead"/></marker></defs><g aria-hidden="true"><rect class="fig-node" x="24" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="99" y="64" text-anchor="middle">Value</text><text class="fig-note" x="99" y="82" text-anchor="middle">one number + memory</text><rect class="fig-node" x="279" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="354" y="64" text-anchor="middle">Neuron</text><text class="fig-note" x="354" y="82" text-anchor="middle">weights, bias, ReLU</text><rect class="fig-node" x="534" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="609" y="64" text-anchor="middle">Layer</text><text class="fig-note" x="609" y="82" text-anchor="middle">a row of neurons</text><rect class="fig-node" x="790" y="24" width="150" height="88" rx="10"/><text class="fig-label" x="865" y="64" text-anchor="middle">MLP</text><text class="fig-note" x="865" y="82" text-anchor="middle">stacked layers</text><line class="fig-edge" x1="179" y1="68" x2="270" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="225" y="56" text-anchor="middle">many make one</text><line class="fig-edge" x1="434" y1="68" x2="525" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="480" y="56" text-anchor="middle">a row of</text><line class="fig-edge" x1="689" y1="68" x2="781" y2="68" marker-end="url(#fig-composition-tip)"/><text class="fig-edge-label" x="735" y="56" text-anchor="middle">stacked into</text></g></svg><figcaption class="figure__caption">Four characters, each built from the one before it. There is nothing else in the library.</figcaption><details class="figure__alt"><summary>Described in words</summary><p>A Value is one remembering number. Many Values make a Neuron. A row of Neurons makes a Layer. Stacked Layers make the MLP you actually call. Parts: Value — one number + memory; Neuron — weights, bias, ReLU; Layer — a row of neurons; MLP — stacked layers Links: value → neuron (many make one); neuron → layer (a row of); layer → mlp (stacked into)</p></details></figure>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">One call — <code>model.parameters()</code> — reaches every trainable number in the network, because each level asks the level below.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>The base class Module defines <code>parameters()</code> returning an empty list, and <code>zero_grad()</code> that loops over whatever <code>parameters()</code> yields. Neuron overrides it with its weights plus bias; Layer concatenates its neurons' lists; MLP concatenates its layers'. Nothing keeps a registry — the list is rebuilt by recursion every call, which is why nothing can ever be stale.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Copy PyTorch&#8217;s API shape instead of inventing one</h3>
+          <span class="tradeoff__src">README.md — "a small neural networks library… with a PyTorch-like API"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>The idioms learners will meet next: <code>model(x)</code>, <code>parameters()</code>, <code>zero_grad()</code>, <code>backward()</code>.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>A cleaner bespoke interface that might avoid PyTorch&#8217;s sharp edges.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>It inherits the footguns too — chief among them that forgetting <code>zero_grad()</code> fails silently, exactly as it does in the real thing.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never for this library: transferring to PyTorch is the goal, so matching its shape is the feature.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">Someone who values reproducibility</p>
+        <blockquote class="defend__q">Weights start at <code>random.uniform(-1,1)</code>, so every run gives different results. Zeros would be reproducible — why is randomness the default?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Start every weight at the same value and every neuron in a layer computes the same output, receives the same gradient, and takes the same update — they are clones at birth and clones forever, so a hundred-neuron layer learns exactly one thing. Randomness is not decoration; it is what breaks the symmetry so neurons can specialise. Reproducibility is recovered the standard way: seed the generator, keep the randomness.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "random just works better in practice". The follow-up is <em>why?</em> — and if you cannot say "identical neurons get identical gradients", you have a superstition, not an answer.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="a"
+             data-u-if-right="Each level asks the level below and passes the list up, so one call on the network reaches every dial in it. That pattern has a name worth knowing: recursion over a tree."
+             data-u-if-wrong="Look at what the network does when asked for its parameters — it loops over its layers and asks each of them the same question.">
+          <h3 class="check__ask">You want to know how many trainable numbers your network has. Where does that come from?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a"><code>len(model.parameters())</code> — each level asks the level below</button>
+            <button class="check__opt" type="button" data-u-answer="b">You work it out by hand from the layer sizes</button>
+            <button class="check__opt" type="button" data-u-answer="c">A global counter inside Value tracks every one ever made</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="The network switches ReLU off for its last layer on purpose. A flattened output could never be negative, and a final score often needs to be."
+             data-u-if-wrong="Something about the last layer is deliberately different from the others. Ask what flattening the negative half would do to a final answer that is allowed to go below zero.">
+          <h3 class="check__ask">You add a layer at the end of a network and suddenly its predictions can never go below zero. What did you miss?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">The new layer needs more neurons</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases should have started random, not at zero</button>
+            <button class="check__opt" type="button" data-u-answer="c">The final layer is meant to be linear — ReLU is switched off there deliberately</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-3" data-u-short="Forward pass">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 03</span>
+      <h1 class="chapter__title">The forward pass</h1>
+      <p class="chapter__lede">You hand the network two numbers. Follow them all the way to an answer.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A rumour going up a building</h2>
+        <p>Each floor of an office hears the rumour from the floor below, adds its own spin, and passes it up. Nobody on the third floor ever speaks to the first — each <button class="gloss" type="button" popovertarget="g-layer">layer</button><span class="gloss-def" popover id="g-layer">One row of neurons, all reading the same input and each producing a single number. Stacking layers is what makes a network deep.</span> only knows what the one below it said.</p>
+        <p>That is the <button class="gloss" type="button" popovertarget="g-forward">forward pass</button><span class="gloss-def" popover id="g-forward">One trip through the network, inputs to output, producing a prediction. The return trip — working out who was to blame for the error — is the backward pass.</span>, and it is three lines long.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 51-54</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        <span class="t-key">for</span> layer <span class="t-key">in</span> self.layers:</span>
+<span class="cl">            x = <span class="t-fn">layer</span>(x)</span>
+<span class="cl">        <span class="t-key">return</span> x</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The whole network's front door. Writing <code>model(x)</code> lands here, because the class defines <button class="gloss" type="button" popovertarget="g-call">__call__</button><span class="gloss-def" popover id="g-call">A special Python method that makes an object usable as if it were a function. Defining it is why you write model(x) rather than model.run(x).</span>.</li>
+            <li>Walk the layers in order, front to back.</li>
+            <li>Hand the current numbers to this layer, and let its answer become the new current numbers. <code>x</code> is a baton being passed, not a record being kept.</li>
+            <li>Whatever the last layer said is the prediction.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="thread u-reveal" data-u="thread">
+        <div class="thread__log">
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-4)">Y</span>
+            <div class="thread__bubble"><span class="thread__name">You</span>model([2.0, 3.0]) — go.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 1, you are up. Here is [2.0, 3.0]. I will wait.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>All three of my neurons see the same input. Nobody gets a private copy.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-3)">N</span>
+            <div class="thread__bubble"><span class="thread__name">Neuron 2</span>w1×2.0 + w2×3.0 + b comes to -0.4. Negative, so my <button class="gloss" type="button" popovertarget="g-activation">activation</button><span class="gloss-def" popover id="g-activation">The single number a neuron produces after weighing its inputs. Engineers say "the activation" where you might say "what this neuron reckons".</span> is flattened to zero. I sit this round out.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Noted. I hold 0, my label is ReLU, and my parent is that -0.4. I forget nothing.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>Collected: [0.7, 0, 1.2]. Passing up.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 2, you are last, so no flattening. Your raw number is the answer.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Final: data -0.83, gradient 0. Every node behind me is still linked. Ready when you are.</div>
+          </div>
+        </div>
+        <div class="thread__typing" data-u-typing hidden>
+          <span class="thread__who" data-u-typing-who>?</span>
+          <span class="thread__dots"><span></span><span></span><span></span></span>
+        </div>
+        <div class="thread__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next message</button>
+          <button class="btn" type="button" data-u-playall>Play all</button>
+          <button class="btn" type="button" data-u-restart>Replay</button>
+          <span class="thread__count" data-u-count></span>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">🔎</span>
+        <div>
+          <strong class="aside__title">Nothing has been learned yet</strong>
+          <p>Read the last message again: the gradient is still zero. The forward pass produces an answer and builds a graph, and that is all it does. Learning has not started.</p>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The graph is not a permanent structure — a fresh one is built on every single call, as a side effect of the arithmetic.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Nothing in nn.py stores connections between calls. Each <code>model(x)</code> runs the multiplies and adds again, and each operation mints new Value objects with fresh parent links — the graph exists because the arithmetic just happened, and is garbage-collected afterwards. That is why the training loop may freely change <code>p.data</code> between calls: next call, a new graph is built around the nudged numbers.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">An API designer, reading Layer&#8217;s last line</p>
+        <blockquote class="defend__q">Returning a bare Value when there is one neuron but a list when there are two is an inconsistency that will bite someone. Pick one shape and keep it.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is a deliberate convenience aimed at the most common case: the final layer of a classifier has one neuron, and unwrapping there means every caller writes <code>score</code> instead of <code>score[0]</code>. The criticism is still fair — in the middle of a network the changing shape genuinely surprises people, and PyTorch chose the opposite trade: always a tensor, always the same shape. Defensible is not the same as free; this one purchases ergonomics at the price of a surprise.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "nobody will notice". The follow-up is chapter three&#8217;s own quiz — the shape difference is noticeable enough that this course tests for it.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Stacked straight lines are still a straight line. The kink at zero is what makes depth worth anything, which is why the neuron takes a switch for it at all."
+             data-u-if-wrong="More layers of pure multiply-and-add collapse back into a single multiply-and-add. Something has to break the straightness.">
+          <h3 class="check__ask">Predictions move in a perfectly straight line however you vary the input. A colleague suggests adding more layers. Why will that not help on its own?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It will help — deeper is always better</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases are all zero, so the layers cancel out</button>
+            <button class="check__opt" type="button" data-u-answer="c">Without a kink between them, stacked layers collapse into one straight line</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="A layer with one neuron hands back the bare number rather than a one-item list. Convenient at the end of a network, and a classic source of confusion anywhere else."
+             data-u-if-wrong="Read the last line of Layer's call method again — it treats the single-neuron case specially.">
+          <h3 class="check__ask">A layer with one neuron returns something shaped differently from a layer with three. What is going on?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">One-neuron layers skip ReLU automatically</button>
+            <button class="check__opt" type="button" data-u-answer="b">It unwraps the single result and hands back the bare number</button>
+            <button class="check__opt" type="button" data-u-answer="c">It returns nothing and the network fills the value in</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-4" data-u-short="Backpropagation">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 04</span>
+      <h1 class="chapter__title">Backpropagation</h1>
+      <p class="chapter__lede">The return journey that assigns blame — and the only reason any of this learns.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The incident review</h2>
+        <p>A parcel arrives three days late. The investigation does not start at the warehouse; it starts at the doorstep and works backwards. The courier was late because the depot was late, because the sorting hub was late.</p>
+        <p>Each stage learns how much of the delay was its own. That backwards walk is <button class="gloss" type="button" popovertarget="g-backprop">backpropagation</button><span class="gloss-def" popover id="g-backprop">Walking the graph from the answer back to the inputs, working out how much each number contributed to the error. Say it by name to an assistant and you will get precise help.</span>, and the number each node ends up holding is its <button class="gloss" type="button" popovertarget="g-gradient">gradient</button><span class="gloss-def" popover id="g-gradient">The answer to one question: if I nudge this number up slightly, does the final error go up or down, and by how much? Positive means nudging up makes things worse.</span>.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 67-70</span>
+          <pre><code><span class="cl">        <span class="t-com"># go one variable at a time and apply the chain rule to get its gradient</span></span>
+<span class="cl">        self.grad = <span class="t-num">1</span></span>
+<span class="cl">        <span class="t-key">for</span> v <span class="t-key">in</span> <span class="t-fn">reversed</span>(topo):</span>
+<span class="cl">            v.<span class="t-fn">_backward</span>()</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The comment names the rule from calculus this implements. You do not need the calculus; you need to know the walk exists.</li>
+            <li>Seed it: this node's effect on itself is exactly one. Nudge the error up by one and the error goes up by one.</li>
+            <li>Now walk the list of nodes <em>backwards</em>. The order was worked out a few lines earlier, and it is the whole trick.</li>
+            <li>Fire each node's note-to-self, the one that was stapled on when it was created. Because of the ordering, every node has already collected all of its incoming credit before it passes any on.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">You have met this ordering before</strong>
+          <p>Listing every node so that parents always come before children is a <button class="gloss" type="button" popovertarget="g-toposort">topological sort</button><span class="gloss-def" popover id="g-toposort">Arranging items so that everything a step depends on comes before it. Build systems, spreadsheet recalculation and task schedulers all run on the same idea.</span> — the same algorithm a build system uses to decide what to compile first. Recognising it here means recognising it everywhere.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"d","say":"Calling backward on d first lists every ancestor in dependency order."},
+        {"at":"d","say":"Seed the walk: d gets a gradient of 1, because nudging d moves d one for one."},
+        {"at":"add","from":"d","to":"add","say":"The + node fires. Addition splits credit evenly, so both parents receive the gradient unchanged."},
+        {"at":"mul","from":"add","to":"mul","say":"The * node fires. Multiplication swaps: each parent is scaled by what the other one held."},
+        {"at":"a","from":"mul","to":"a","say":"a ends up with 2.0 and b with 4.0. Every input now knows exactly how much it mattered."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>a.grad = 2.0</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>the * node</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d.grad = 1</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="The same expression as chapter one, running in reverse.">The same expression as chapter one, running in reverse.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>The final node is seeded with a gradient of 1.</li>
+          <li>Addition passes its gradient to both parents unchanged.</li>
+          <li>Multiplication scales each parent by what the other held.</li>
+          <li>The inputs end up holding how much each of them mattered.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One character that is easy to miss</h2>
+        <p>Every note-to-self in engine.py adds to the gradient with <code>+=</code>, never <code>=</code>. It looks like a style choice. It is not.</p>
+      </section>
+
+      <div class="cards u-reveal">
+        <div class="card"><span class="card__glyph" aria-hidden="true">➕</span><h3 class="card__title">Why it adds</h3><p>A number used in two places earns credit from both. Assigning would let the second contribution quietly erase the first.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🧹</span><h3 class="card__title">Why wiping matters</h3><p>Because gradients accumulate, they have to be cleared before every training step, or this round's blame lands on top of last round's.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🔁</span><h3 class="card__title">Same trap in PyTorch</h3><p>Real training loops call zero_grad for exactly this reason. Same trap, same fix, four orders of magnitude more code.</p></div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The ordering guarantees each note-to-self fires exactly once, only after all of its incoming credit has arrived.</p>
+        <details class="depth__more">
+          <summary>Where it gets subtle</summary>
+          <div class="depth__body">
+            <p>The subtlety is a number used twice. In <code>a + a</code>, both parents of the sum are the same object, so its note adds to <code>a.grad</code> twice — which is the correct calculus, and only works because the notes accumulate with <code>+=</code> onto a node that fires after all paths have reported. Replace <code>+=</code> with <code>=</code> and the second path silently erases the first. The fieldwork below lets you catch this with your own eyes.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="fieldwork u-reveal">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~4 minutes, read-only</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>micrograd/engine.py</code> and reread <code>__add__</code>, lines 13-22.</p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>Someone writes <code>b = a + a</code>, then <code>b.backward()</code>. Write down the final value of <code>a.grad</code> — and which exact lines produce it.</p></div>
+          <details class="fieldwork__check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer">
+              <p><code>a.grad</code> ends at <strong>2</strong>. Both <code>self</code> and <code>other</code> are the same object, so lines 18 and 19 — <code>self.grad += out.grad</code> and <code>other.grad += out.grad</code> — add 1 to the same number twice. If you predicted 1, you have just met the exact bug that <code>=</code> instead of <code>+=</code> would create, and you will never write it.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Powers accept plain numbers only, never another Value</h3>
+          <span class="tradeoff__src">micrograd/engine.py, line 36 — "only supporting int/float powers for now"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>An <code>assert</code> that refuses a Value exponent, with the reason written into the error message itself.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>General <code>x ** y</code> where both vary — which would drag logarithms into the gradient rule for a case the library never needs.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Division works only because it is rewritten as <code>x * other**-1</code>; anything fancier with exponents is simply out of bounds.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>The message says "for now" — the boundary is explicitly provisional, waiting for a need that teaching has never had.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A newcomer reading backward() closely</p>
+        <blockquote class="defend__q">Why does the walk start with <code>self.grad = 1</code>? That looks like an arbitrary magic number smuggled into the maths.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is the one gradient you get for free: the question every gradient answers is "if this number moves, how much does the <em>final</em> number move?" — and the final number moves one-for-one with itself. Every other gradient in the graph is manufactured from that seed by the chain rule, each note multiplying or passing it backwards. Change the seed to 2 and every gradient in the network doubles, which is exactly why 1 is the only honest start.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it is just a convention". The follow-up — <em>what would happen with 0?</em> — has a concrete answer (every gradient becomes 0 and nothing learns), which proves the value is doing real work.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The ordering guarantees a node has collected all its incoming credit before it passes any on. Fire them in creation order and nodes push half-finished numbers downstream."
+             data-u-if-wrong="The ordering is not about speed or tidiness. Think about a node that receives credit along two different paths, firing before the second path has arrived.">
+          <h3 class="check__ask">An assistant offers to simplify the backward pass by dropping the ordering step and looping over nodes in the order they were created. What goes wrong?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — creation order and dependency order are always the same</button>
+            <button class="check__opt" type="button" data-u-answer="b">Nodes fire before all their credit has arrived, so gradients come out quietly wrong — no crash, just a network that never quite learns</button>
+            <button class="check__opt" type="button" data-u-answer="c">It raises an infinite recursion error</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="That shape — fine for a few steps, then chaos, with nothing in the logs — is the signature of stale gradients piling up. Recognising it saves hours."
+             data-u-if-wrong="Picture a gradient that is added to and never reset. After ten steps it holds roughly ten steps of blame, and the update overshoots wildly.">
+          <h3 class="check__ask">You forget to wipe the gradients in your training loop. What do you actually see?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">A crash on the second iteration</button>
+            <button class="check__opt" type="button" data-u-answer="b">Predictions frozen at their starting values forever</button>
+            <button class="check__opt" type="button" data-u-answer="c">A few good steps, then the error explodes or stalls — with no error message anywhere</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-5" data-u-short="When it breaks">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 05</span>
+      <h1 class="chapter__title">When it breaks</h1>
+      <p class="chapter__lede">The failures that never raise an error, and how to smell them out anyway.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Every bug here is silent</h2>
+        <p>A website that breaks throws a red <button class="gloss" type="button" popovertarget="g-stacktrace">stack trace</button><span class="gloss-def" popover id="g-stacktrace">The list of function calls that led to a crash, printed newest first. It tells you where the program was standing when it gave up.</span> at you. A training loop that breaks returns a number.</p>
+        <p>A perfectly reasonable-looking, completely wrong number. This is the most useful thing to internalise about machine learning code: <strong>the absence of an error means nothing.</strong></p>
+      </section>
+
+      <div class="steps u-reveal">
+        <div class="step"><div><strong>The error falls, then explodes</strong><p>Blame accumulating across steps — a missing wipe, or a step size too large</p></div></div>
+        <div class="step"><div><strong>The error refuses to move</strong><p>Every gradient is zero. Often an entire layer is stuck in the flat negative half of ReLU</p></div></div>
+        <div class="step"><div><strong>It dies on a big batch</strong><p><button class="gloss" type="button" popovertarget="g-recursion">Recursion</button><span class="gloss-def" popover id="g-recursion">A function that calls itself to handle a smaller piece of the same problem. Each call waits for the one inside it, and every language caps how deep that nesting may go.</span>: the ordering step calls itself once per node, and Python gives up around a thousand deep</p></div></div>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The four lines that prevent most of it</h2>
+        <p>The whole defence lives on the shared base class, so every neuron, layer and network inherits it.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 4-8</span>
+          <pre><code><span class="cl"><span class="t-key">class</span> <span class="t-fn">Module</span>:</span>
+<span class="cl"></span>
+<span class="cl">    <span class="t-key">def</span> <span class="t-fn">zero_grad</span>(self):</span>
+<span class="cl">        <span class="t-key">for</span> p <span class="t-key">in</span> self.<span class="t-fn">parameters</span>():</span>
+<span class="cl">            p.grad = <span class="t-num">0</span></span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>A <button class="gloss" type="button" popovertarget="g-baseclass">base class</button><span class="gloss-def" popover id="g-baseclass">Behaviour written once and shared by several other classes, instead of copied into each. Neuron, Layer and MLP all build on this one.</span> that the three network pieces share, so these lines are written once rather than three times.</li>
+            <li>Wipe every gradient inside whatever this object contains.</li>
+            <li>Ask for the full list of dials — the same recursive walk from chapter two, so calling this on the network reaches every weight in it.</li>
+            <li>Set each accumulated blame back to zero. Miss this and the next backward pass adds to numbers that are already stale.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="hunt u-reveal" data-u="hunt">
+        <h3>This training loop runs without complaint and never improves. One line is responsible.</h3>
+        <div class="hunt__code">
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Looping a fixed number of times is fine — keep looking."><span class="hunt__n">1</span><code>for k in range(100):</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Asking the network for its predictions is exactly what should happen first."><span class="hunt__n">2</span><code>    scores = [model(x) for x in inputs]</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Measuring how wrong the predictions were is correct at this point."><span class="hunt__n">3</span><code>    loss = sum((s - y)**2 for s, y in zip(scores, targets))</code></button>
+          <button class="hunt__line" type="button" data-u-line="bug" data-u-why="Gradients are added to, never replaced, so the blame from round one is still sitting there when round two adds to it. A call to model.zero_grad() belongs immediately before this line."><span class="hunt__n">4</span><code>    loss.backward()</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="Walking every parameter is the right way to apply an update."><span class="hunt__n">5</span><code>    for p in model.parameters():</code></button>
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="The minus sign is correct — you move downhill, against the gradient."><span class="hunt__n">6</span><code>        p.data -= 0.01 * p.grad</code></button>
+        </div>
+        <p class="hunt__result" data-u-result role="status" aria-live="polite"></p>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The correct loop, one move at a time</h2>
+        <p>Four moves in a fixed order. Get the order wrong and nothing complains.</p>
+      </section>
+
+      <div class="stack u-reveal" data-u="stack">
+        <div class="stack__tabs" role="tablist">
+          <button class="stack__tab" type="button" role="tab" data-u-tab="fwd" aria-selected="true">1 · Predict</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="loss" aria-selected="false">2 · Measure</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="back" aria-selected="false">3 · Blame</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="step" aria-selected="false">4 · Nudge</button>
+        </div>
+        <div class="stack__pane" data-u-pane="fwd" role="tabpanel"><p><strong>Ask the network what it thinks.</strong> Numbers flow front to back and a graph gets built as a side effect. No learning happens here at all.</p></div>
+        <div class="stack__pane" data-u-pane="loss" role="tabpanel" hidden><p><strong>Measure how wrong it was.</strong> The error is itself one of micrograd's numbers, sitting at the top of the graph — which is precisely why you can start the backward walk from it.</p></div>
+        <div class="stack__pane" data-u-pane="back" role="tabpanel" hidden><p><strong>Wipe first, then assign blame.</strong> Clear the gradients, then walk backwards. Skip the wipe and every step inherits the last one's numbers.</p></div>
+        <div class="stack__pane" data-u-pane="step" role="tabpanel" hidden><p><strong>Turn every dial a little.</strong> Each parameter moves against its gradient. Only the stored number changes — the graph itself is rebuilt from scratch next time round.</p></div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The recursion crash is a property of Python&#8217;s call stack, not of micrograd&#8217;s logic — the maths would be fine one node deeper.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p><code>build_topo</code> calls itself once for every node it has not yet visited, and each unfinished call occupies a stack frame while it waits. A long chain of operations means a long chain of waiting frames, and Python refuses somewhere near a thousand. The standard cure is mechanical — an explicit stack in a loop instead of the call stack — and the reason micrograd does not use it is the same reason it does everything else: the recursive version reads like the definition of the ordering it computes.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="fieldwork u-reveal">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~5 minutes, read-only</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>test/test_engine.py</code> in the repository.</p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>These tests assert that gradients are <em>correct</em> — yet nobody computed an expected value like 138.8338 by hand. Before looking: where do the right answers come from? Write down your guess.</p></div>
+          <details class="fieldwork__check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer">
+              <p>The tests build the identical expression twice — once with micrograd&#8217;s Value, once with PyTorch tensors — run <code>backward()</code> on both, and assert the numbers agree. The oracle is the industrial implementation of the same mathematics. That is a pattern worth keeping: when reimplementing something that already exists, the existing one is your test oracle, and you never hand-compute an expected value again.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">An engineer filing their first issue</p>
+        <blockquote class="defend__q">The RecursionError on large graphs is simply a bug. An iterative topological sort is twenty minutes of work — ship it.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>In a production library you would be right, and PyTorch is that library. Here the recursive version earns its fragility: it is four lines that read exactly like the definition — visit the parents, then yourself — and this codebase&#8217;s entire reason to exist is that every line teaches. The crash even teaches: it arrives precisely when your graph outgrows a toy, which is the moment to graduate anyway.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "just raise the recursion limit". The follow-up is <em>to what?</em> — the stack is finite, so the limit moves and the crash keeps its appointment; only the iterative rewrite removes it.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The ordering step calls itself once per node, and a giant batch makes a graph far deeper than Python allows. Smaller batches keep each graph shallow, which is one real reason batching exists beyond memory."
+             data-u-if-wrong="The error names recursion specifically. Ask which part of the engine calls itself, and how the size of your batch changes how deep it goes.">
+          <h3 class="check__ask">A loop that trains fine on twenty samples dies with a recursion error on fifty thousand in one batch. What is actually happening?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">The step size is too large and the numbers overflowed</button>
+            <button class="check__opt" type="button" data-u-answer="b">The ordering step calls itself once per node, and one giant batch makes a graph deeper than Python's limit</button>
+            <button class="check__opt" type="button" data-u-answer="c">micrograd has a hard cap on how many numbers can exist</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="a"
+             data-u-if-right="Naming the mechanism and the place leaves an assistant nothing to guess at. This is what the vocabulary is for."
+             data-u-if-wrong="The other two describe a symptom without naming a mechanism, so the assistant has to guess among a dozen causes — and it will usually guess the step size.">
+          <h3 class="check__ask">Your error explodes after five steps. Which request gets you the fastest correct fix?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">"Gradients are accumulating across iterations — check whether I am zeroing them before the backward pass"</button>
+            <button class="check__opt" type="button" data-u-answer="b">"My model is not working, please fix it"</button>
+            <button class="check__opt" type="button" data-u-answer="c">"The numbers are getting really big, make them smaller"</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+      <div class="recall u-reveal">
+        <h3 class="recall__title">Before you close this</h3>
+        <p class="recall__note">Answer these from memory before opening any of them — then again in three days, and once more next week. Say your confidence out loud first; being surprised by your own answer is the point.</p>
+        <div class="recall__list">
+          <div class="recall__item">
+            <p class="recall__q">Someone writes <code>b = a + a</code> and calls <code>b.backward()</code>. What is <code>a.grad</code>, and which single character in engine.py makes that answer possible?</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>2 — the plus in <code>+=</code>. Both parents are the same object, so the note adds to it twice; plain <code>=</code> would erase the first contribution.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Explain to a colleague why every training loop must call <code>zero_grad()</code>, and what they would see if they forgot.</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>Gradients accumulate by design, so each round&#8217;s blame lands on top of the last; the loop looks fine briefly, then the loss explodes or stalls with no error anywhere.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Walk <code>d = a * b + c</code> forwards and then backwards, naming what each node stores and when its note-to-self fires.</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>Forward: each operation mints a Value holding data, parents, and a closure. Backward: seed <code>d.grad = 1</code>, then fire notes in reverse topological order — addition passes credit through, multiplication swaps in the other operand&#8217;s data.</p></details>
+          </div>
+          <div class="recall__item">
+            <p class="recall__q">Why does the last layer of an MLP skip ReLU, and what symptom appears if it does not?</p>
+            <details class="recall__a"><summary>What a good answer includes</summary><p>The final answer must be allowed to go negative; a squashed output never can, so predictions mysteriously floor at zero.</p></details>
+          </div>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">🎓</span>
+        <div>
+          <strong class="aside__title">What you now know</strong>
+          <p>Everything PyTorch does, micrograd does in 150 lines: a graph of operations, a backward walk that assigns blame, and a loop that nudges dials. The rest is speed, hardware, and convenience.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer class="u-colophon">Describes <code>micrograd</code> at commit <code>7bc720e</code> · Generated 27 Aug 2026 · regenerate when the code moves on</footer>
+</main>
+
+</body>
+</html>

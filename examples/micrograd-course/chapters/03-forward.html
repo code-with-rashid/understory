@@ -1,0 +1,148 @@
+<section class="chapter" id="ch-3" data-u-short="Forward pass">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 03</span>
+      <h1 class="chapter__title">The forward pass</h1>
+      <p class="chapter__lede">You hand the network two numbers. Follow them all the way to an answer.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">A rumour going up a building</h2>
+        <p>Each floor of an office hears the rumour from the floor below, adds its own spin, and passes it up. Nobody on the third floor ever speaks to the first — each <button class="gloss" type="button" popovertarget="g-layer">layer</button><span class="gloss-def" popover id="g-layer">One row of neurons, all reading the same input and each producing a single number. Stacking layers is what makes a network deep.</span> only knows what the one below it said.</p>
+        <p>That is the <button class="gloss" type="button" popovertarget="g-forward">forward pass</button><span class="gloss-def" popover id="g-forward">One trip through the network, inputs to output, producing a prediction. The return trip — working out who was to blame for the error — is the backward pass.</span>, and it is three lines long.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 51-54</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        <span class="t-key">for</span> layer <span class="t-key">in</span> self.layers:</span>
+<span class="cl">            x = <span class="t-fn">layer</span>(x)</span>
+<span class="cl">        <span class="t-key">return</span> x</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The whole network's front door. Writing <code>model(x)</code> lands here, because the class defines <button class="gloss" type="button" popovertarget="g-call">__call__</button><span class="gloss-def" popover id="g-call">A special Python method that makes an object usable as if it were a function. Defining it is why you write model(x) rather than model.run(x).</span>.</li>
+            <li>Walk the layers in order, front to back.</li>
+            <li>Hand the current numbers to this layer, and let its answer become the new current numbers. <code>x</code> is a baton being passed, not a record being kept.</li>
+            <li>Whatever the last layer said is the prediction.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="thread u-reveal" data-u="thread">
+        <div class="thread__log">
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-4)">Y</span>
+            <div class="thread__bubble"><span class="thread__name">You</span>model([2.0, 3.0]) — go.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 1, you are up. Here is [2.0, 3.0]. I will wait.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>All three of my neurons see the same input. Nobody gets a private copy.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-3)">N</span>
+            <div class="thread__bubble"><span class="thread__name">Neuron 2</span>w1×2.0 + w2×3.0 + b comes to -0.4. Negative, so my <button class="gloss" type="button" popovertarget="g-activation">activation</button><span class="gloss-def" popover id="g-activation">The single number a neuron produces after weighing its inputs. Engineers say "the activation" where you might say "what this neuron reckons".</span> is flattened to zero. I sit this round out.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Noted. I hold 0, my label is ReLU, and my parent is that -0.4. I forget nothing.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">L</span>
+            <div class="thread__bubble"><span class="thread__name">Layer 1</span>Collected: [0.7, 0, 1.2]. Passing up.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">M</span>
+            <div class="thread__bubble"><span class="thread__name">MLP</span>Layer 2, you are last, so no flattening. Your raw number is the answer.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-5)">V</span>
+            <div class="thread__bubble"><span class="thread__name">Value</span>Final: data -0.83, gradient 0. Every node behind me is still linked. Ready when you are.</div>
+          </div>
+        </div>
+        <div class="thread__typing" data-u-typing hidden>
+          <span class="thread__who" data-u-typing-who>?</span>
+          <span class="thread__dots"><span></span><span></span><span></span></span>
+        </div>
+        <div class="thread__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next message</button>
+          <button class="btn" type="button" data-u-playall>Play all</button>
+          <button class="btn" type="button" data-u-restart>Replay</button>
+          <span class="thread__count" data-u-count></span>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">🔎</span>
+        <div>
+          <strong class="aside__title">Nothing has been learned yet</strong>
+          <p>Read the last message again: the gradient is still zero. The forward pass produces an answer and builds a graph, and that is all it does. Learning has not started.</p>
+        </div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The graph is not a permanent structure — a fresh one is built on every single call, as a side effect of the arithmetic.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>Nothing in nn.py stores connections between calls. Each <code>model(x)</code> runs the multiplies and adds again, and each operation mints new Value objects with fresh parent links — the graph exists because the arithmetic just happened, and is garbage-collected afterwards. That is why the training loop may freely change <code>p.data</code> between calls: next call, a new graph is built around the nudged numbers.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">An API designer, reading Layer&#8217;s last line</p>
+        <blockquote class="defend__q">Returning a bare Value when there is one neuron but a list when there are two is an inconsistency that will bite someone. Pick one shape and keep it.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is a deliberate convenience aimed at the most common case: the final layer of a classifier has one neuron, and unwrapping there means every caller writes <code>score</code> instead of <code>score[0]</code>. The criticism is still fair — in the middle of a network the changing shape genuinely surprises people, and PyTorch chose the opposite trade: always a tensor, always the same shape. Defensible is not the same as free; this one purchases ergonomics at the price of a surprise.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "nobody will notice". The follow-up is chapter three&#8217;s own quiz — the shape difference is noticeable enough that this course tests for it.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="Stacked straight lines are still a straight line. The kink at zero is what makes depth worth anything, which is why the neuron takes a switch for it at all."
+             data-u-if-wrong="More layers of pure multiply-and-add collapse back into a single multiply-and-add. Something has to break the straightness.">
+          <h3 class="check__ask">Predictions move in a perfectly straight line however you vary the input. A colleague suggests adding more layers. Why will that not help on its own?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">It will help — deeper is always better</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases are all zero, so the layers cancel out</button>
+            <button class="check__opt" type="button" data-u-answer="c">Without a kink between them, stacked layers collapse into one straight line</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="A layer with one neuron hands back the bare number rather than a one-item list. Convenient at the end of a network, and a classic source of confusion anywhere else."
+             data-u-if-wrong="Read the last line of Layer's call method again — it treats the single-neuron case specially.">
+          <h3 class="check__ask">A layer with one neuron returns something shaped differently from a layer with three. What is going on?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">One-neuron layers skip ReLU automatically</button>
+            <button class="check__opt" type="button" data-u-answer="b">It unwraps the single result and hands back the bare number</button>
+            <button class="check__opt" type="button" data-u-answer="c">It returns nothing and the network fills the value in</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>understory engine fixture</title>
+<link rel="stylesheet" href="../toolkit/course.css">
+<script src="../toolkit/course.js" defer></script>
+<script src="harness.js" defer></script>
+</head>
+<body>
+
+<div class="u-progress" data-u="progress" role="progressbar" aria-label="Reading progress"></div>
+
+<nav class="u-rail" data-u="rail" aria-label="Chapters">
+  <span class="u-rail__title">Fixture</span>
+  <ul class="u-rail__list">
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-1" aria-current="false"><span class="u-rail__num">01</span><span class="u-rail__label">One</span></button></li>
+    <li><button class="u-rail__link" type="button" data-u-goto="ch-2" aria-current="false"><span class="u-rail__num">02</span><span class="u-rail__label">Two</span></button></li>
+  </ul>
+</nav>
+
+<main class="u-main">
+
+<section class="chapter" id="ch-1" data-u-short="One">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 01</span>
+      <h1 class="chapter__title">First</h1>
+      <p class="chapter__lede">Every component, wired the documented way.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Gloss</h2>
+        <p>A term with a definition:
+          <button class="gloss" type="button" popovertarget="g-dag">DAG</button><span class="gloss-def" popover id="g-dag">A one-way graph with no loops back to the start.</span>
+        </p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">fixture/sample.py, lines 1-4</span>
+          <pre><code><span class="cl">def add(a, b):</span>
+<span class="cl">    return a + b</span>
+<span class="cl"></span>
+<span class="cl">total = add(2, 3)</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol><li>Define a function.</li><li>Hand back the sum.</li><li>Call it.</li></ol>
+        </div>
+      </div>
+
+      <div class="check u-reveal" data-u="check" id="check-a">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="Because b is the right one."
+             data-u-if-wrong="Think again about b.">
+          <h3 class="check__ask">Which one is right?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Not this</button>
+            <button class="check__opt" type="button" data-u-answer="b">This one</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" id="trace-a" data-u-steps='[
+        {"at":"one","say":"Start at one."},
+        {"at":"two","from":"one","to":"two","say":"Move to two."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="one" data-lit="false"><span class="trace__glyph">1</span><span>One</span></div>
+          <div class="trace__node" data-u-node="two" data-lit="false"><span class="trace__glyph">2</span><span>Two</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Idle.">Idle.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+      </div>
+
+      <div class="thread u-reveal" data-u="thread" id="thread-a">
+        <div class="thread__log">
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-1)">A</span>
+            <div class="thread__bubble"><span class="thread__name">Alpha</span>First message.</div>
+          </div>
+          <div class="thread__msg" data-u-msg hidden>
+            <span class="thread__who" data-u-who style="background: var(--cast-2)">B</span>
+            <div class="thread__bubble"><span class="thread__name">Beta</span>Second message.</div>
+          </div>
+        </div>
+        <div class="thread__typing" data-u-typing hidden>
+          <span class="thread__who" data-u-typing-who>?</span>
+          <span class="thread__dots"><span></span><span></span><span></span></span>
+        </div>
+        <div class="thread__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next message</button>
+          <button class="btn" type="button" data-u-playall>Play all</button>
+          <button class="btn" type="button" data-u-restart>Replay</button>
+          <span class="thread__count" data-u-count></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="chapter" id="ch-2" data-u-short="Two">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 02</span>
+      <h1 class="chapter__title">Second</h1>
+      <p class="chapter__lede">Edge cases: repeated node names, and a broken component.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <!-- deliberately reuses the node names from trace-a -->
+      <div class="trace u-reveal" data-u="trace" id="trace-b" data-u-steps='[
+        {"at":"one","say":"Start at one, in the second trace."},
+        {"at":"two","from":"one","to":"two","say":"Move to two, in the second trace."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="one" data-lit="false"><span class="trace__glyph">1</span><span>One</span></div>
+          <div class="trace__node" data-u-node="two" data-lit="false"><span class="trace__glyph">2</span><span>Two</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Idle.">Idle.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+      </div>
+
+      <!-- deliberately malformed JSON: must not stop anything below it -->
+      <div class="trace" data-u="trace" id="trace-broken" data-u-steps='[{"at":"one",}]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="one" data-lit="false"><span class="trace__glyph">1</span><span>One</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Idle.">Idle.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+      </div>
+
+      <div class="match u-reveal" data-u="match" id="match-a">
+        <div class="match__chips">
+          <button class="match__chip" type="button" data-u-chip="alpha">Alpha</button>
+          <button class="match__chip" type="button" data-u-chip="beta">Beta</button>
+        </div>
+        <div class="match__slots">
+          <div class="match__row">
+            <p class="match__prompt">Belongs to alpha</p>
+            <button class="match__slot" type="button" data-u-slot="alpha" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Belongs to beta</p>
+            <button class="match__slot" type="button" data-u-slot="beta" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+        </div>
+        <p class="match__result" data-u-result role="status" aria-live="polite"></p>
+        <div class="match__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check matches</button>
+          <button class="btn" type="button" data-u-again>Reset</button>
+        </div>
+      </div>
+
+      <div class="hunt u-reveal" data-u="hunt" id="hunt-a">
+        <h3>Find the bug:</h3>
+        <div class="hunt__code">
+          <button class="hunt__line" type="button" data-u-line="ok" data-u-why="This line is fine."><span class="hunt__n">1</span><code>x = 1</code></button>
+          <button class="hunt__line" type="button" data-u-line="bug" data-u-why="It divides by zero."><span class="hunt__n">2</span><code>y = x / 0</code></button>
+        </div>
+        <p class="hunt__result" data-u-result role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="map u-reveal" data-u="map" id="map-a">
+        <div class="map__zone">
+          <span class="map__zone-name">Zone</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="The first piece does this."><span class="map__glyph">📄</span><span>First</span></button>
+            <button class="map__part" type="button" data-u-part="The second piece does that."><span class="map__glyph">⚙️</span><span>Second</span></button>
+          </div>
+        </div>
+        <p class="map__readout" data-u-readout role="status" aria-live="polite">Pick a piece.</p>
+      </div>
+
+      <div class="stack u-reveal" data-u="stack" id="stack-a">
+        <div class="stack__tabs" role="tablist">
+          <button class="stack__tab" type="button" role="tab" data-u-tab="one" aria-selected="true">One</button>
+          <button class="stack__tab" type="button" role="tab" data-u-tab="two" aria-selected="false">Two</button>
+        </div>
+        <div class="stack__pane" data-u-pane="one" role="tabpanel"><p>Pane one.</p></div>
+        <div class="stack__pane" data-u-pane="two" role="tabpanel" hidden><p>Pane two.</p></div>
+      </div>
+
+      <figure class="figure u-reveal"><svg class="fig" viewBox="0 0 900 280" role="img" aria-labelledby="fig-fixture-seq-t fig-fixture-seq-d" preserveAspectRatio="xMidYMid meet"><title id="fig-fixture-seq-t">Fixture sequence</title><desc id="fig-fixture-seq-d">A asks B for something and B replies.</desc><defs><marker id="fig-fixture-seq-tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="fig-arrowhead"/></marker></defs><g aria-hidden="true"><rect class="fig-lane-head" x="30" y="24" width="414" height="52" rx="10"/><text class="fig-label" x="237" y="54" text-anchor="middle">Caller</text><line class="fig-lifeline" x1="237" y1="76" x2="237" y2="256"/><rect class="fig-lane-head" x="456" y="24" width="414" height="52" rx="10"/><text class="fig-label" x="663" y="54" text-anchor="middle">Service</text><line class="fig-lifeline" x1="663" y1="76" x2="663" y2="256"/><line class="fig-edge" x1="243" y1="104" x2="653" y2="104" marker-end="url(#fig-fixture-seq-tip)"/><text class="fig-edge-label" x="450" y="95" text-anchor="middle">ask</text><rect class="fig-selfnote" x="594" y="141" width="137" height="34" rx="8"/><text class="fig-note" x="663" y="159" text-anchor="middle">thinks about it</text><line class="fig-edge fig-edge--dashed" x1="657" y1="212" x2="247" y2="212" marker-end="url(#fig-fixture-seq-tip)"/><text class="fig-edge-label" x="450" y="203" text-anchor="middle">answer</text></g></svg><figcaption class="figure__caption">A test figure.</figcaption><details class="figure__alt"><summary>Described in words</summary><p>A asks B for something and B replies. Order: 1. a → b: ask 2. at b: thinks about it 3. b → a: answer</p></details></figure>
+
+      <div class="aside aside--myth u-reveal" id="myth-a">
+        <span class="aside__glyph" aria-hidden="true">✗</span>
+        <div>
+          <strong class="aside__title"><span class="myth__flag">A common assumption</span></strong>
+          <span class="myth__wrong">"The wrong thing everyone believes."</span>
+          <p>The correction, stated more vividly than the myth.</p>
+        </div>
+      </div>
+
+      <div class="territory u-reveal" id="territory-a">
+        <div class="territory__head">
+          <h3 class="territory__title">Fixture territory</h3>
+          <p class="territory__note">Two areas covered, one routed.</p>
+        </div>
+        <div class="territory__rows">
+          <div class="territory__row"><span class="territory__name">alpha</span><span class="territory__what">does alpha things</span><span class="territory__status territory__status--here">this course</span></div>
+          <div class="territory__row"><span class="territory__name">beta</span><span class="territory__what">does beta things</span><span class="territory__status territory__status--later">later</span></div>
+        </div>
+      </div>
+
+      <div class="fieldwork u-reveal" id="fieldwork-a">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~2 minutes</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>src/example.ts</code></p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>What does it return for zero?</p></div>
+          <details class="fieldwork__check" id="fieldwork-a-check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer"><p>It returns one, because of the guard on line 3.</p></div>
+          </details>
+        </div>
+      </div>
+
+      <div class="recall u-reveal" id="recall-a">
+        <h3 class="recall__title">Before you close this</h3>
+        <p class="recall__note">Answer from memory first.</p>
+        <div class="recall__list">
+          <div class="recall__item">
+            <p class="recall__q">Explain the thing.</p>
+            <details class="recall__a" id="recall-a-answer"><summary>What a good answer includes</summary><p>The two halves of the thing.</p></details>
+          </div>
+        </div>
+      </div>
+
+      <div class="depth u-reveal" id="depth-a">
+        <p class="depth__short">The short answer, always visible.</p>
+        <details class="depth__more" id="depth-a-more">
+          <summary>How it actually works</summary>
+          <div class="depth__body"><p>The mechanism, folded away until wanted.</p></div>
+        </details>
+      </div>
+
+      <div class="defend u-reveal" id="defend-a">
+        <p class="defend__who">A staff engineer asks:</p>
+        <blockquote class="defend__q">Why not do the obvious thing instead?</blockquote>
+        <p class="defend__prompt">Answer it in your head first.</p>
+        <details class="defend__reveal" id="defend-a-reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Because the obvious thing breaks under concurrency.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it is faster".</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="tradeoff u-reveal" id="tradeoff-a">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Store a symbol, not a computed list</h3>
+          <span class="tradeoff__src">docs/adr/0019-example.md</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>A stable symbol.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>Raw expanded lists.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>An extra lookup at read time.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>The catalog stops changing.</p></div>
+        </div>
+      </div>
+
+      <div class="check u-reveal" data-u="check" id="check-b">
+        <div class="check__q" data-u-question data-u-correct="x"
+             data-u-if-right="Right." data-u-if-wrong="Wrong.">
+          <h3 class="check__ask">Second quiz, after the broken component?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="x">Yes</button>
+            <button class="check__opt" type="button" data-u-answer="y">No</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<pre id="u-test-results" hidden>pending</pre>
+</body>
+</html>

@@ -1,0 +1,19 @@
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"one","say":"TODO what happens first. No apostrophes in here."},
+        {"at":"two","from":"one","to":"two","say":"TODO the first hand-off."},
+        {"at":"three","from":"two","to":"three","say":"TODO where it ends up."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="one" data-lit="false"><span class="trace__glyph">1</span><span>TODO name</span></div>
+          <div class="trace__node" data-u-node="two" data-lit="false"><span class="trace__glyph">2</span><span>TODO name</span></div>
+          <div class="trace__node" data-u-node="three" data-lit="false"><span class="trace__glyph">3</span><span>TODO name</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="Step through it one move at a time.">Step through it one move at a time.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script"><li>TODO the same steps in prose, for readers without JavaScript.</li></ol>
+      </div>

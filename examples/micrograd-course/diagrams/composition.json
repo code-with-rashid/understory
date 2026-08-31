@@ -1,0 +1,17 @@
+{
+  "type": "flow",
+  "title": "What each piece is built from",
+  "desc": "A Value is one remembering number. Many Values make a Neuron. A row of Neurons makes a Layer. Stacked Layers make the MLP you actually call.",
+  "caption": "Four characters, each built from the one before it. There is nothing else in the library.",
+  "nodes": [
+    { "id": "value", "label": "Value", "note": "one number + memory" },
+    { "id": "neuron", "label": "Neuron", "note": "weights, bias, ReLU" },
+    { "id": "layer", "label": "Layer", "note": "a row of neurons" },
+    { "id": "mlp", "label": "MLP", "note": "stacked layers" }
+  ],
+  "edges": [
+    { "from": "value", "to": "neuron", "label": "many make one" },
+    { "from": "neuron", "to": "layer", "label": "a row of" },
+    { "from": "layer", "to": "mlp", "label": "stacked into" }
+  ]
+}

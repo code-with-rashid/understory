@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Courses generated from private codebases stay local — their snippets,
+# decision records and commit ids are not ours to publish.
+examples/oi-apps-core-course/
+examples/oi-apps-core-course-2/

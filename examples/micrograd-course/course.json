@@ -1,0 +1,7 @@
+{
+  "title": "How micrograd Works",
+  "subtitle": "A hundred and fifty lines of Python that learn",
+  "palette": "pine",
+  "lang": "en",
+  "source": "../../../micrograd"
+}

@@ -1,0 +1,171 @@
+<section class="chapter" id="ch-4" data-u-short="Backpropagation">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 04</span>
+      <h1 class="chapter__title">Backpropagation</h1>
+      <p class="chapter__lede">The return journey that assigns blame — and the only reason any of this learns.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">The incident review</h2>
+        <p>A parcel arrives three days late. The investigation does not start at the warehouse; it starts at the doorstep and works backwards. The courier was late because the depot was late, because the sorting hub was late.</p>
+        <p>Each stage learns how much of the delay was its own. That backwards walk is <button class="gloss" type="button" popovertarget="g-backprop">backpropagation</button><span class="gloss-def" popover id="g-backprop">Walking the graph from the answer back to the inputs, working out how much each number contributed to the error. Say it by name to an assistant and you will get precise help.</span>, and the number each node ends up holding is its <button class="gloss" type="button" popovertarget="g-gradient">gradient</button><span class="gloss-def" popover id="g-gradient">The answer to one question: if I nudge this number up slightly, does the final error go up or down, and by how much? Positive means nudging up makes things worse.</span>.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/engine.py, lines 67-70</span>
+          <pre><code><span class="cl">        <span class="t-com"># go one variable at a time and apply the chain rule to get its gradient</span></span>
+<span class="cl">        self.grad = <span class="t-num">1</span></span>
+<span class="cl">        <span class="t-key">for</span> v <span class="t-key">in</span> <span class="t-fn">reversed</span>(topo):</span>
+<span class="cl">            v.<span class="t-fn">_backward</span>()</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>The comment names the rule from calculus this implements. You do not need the calculus; you need to know the walk exists.</li>
+            <li>Seed it: this node's effect on itself is exactly one. Nudge the error up by one and the error goes up by one.</li>
+            <li>Now walk the list of nodes <em>backwards</em>. The order was worked out a few lines earlier, and it is the whole trick.</li>
+            <li>Fire each node's note-to-self, the one that was stapled on when it was created. Because of the ordering, every node has already collected all of its incoming credit before it passes any on.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="aside u-reveal">
+        <span class="aside__glyph" aria-hidden="true">💡</span>
+        <div>
+          <strong class="aside__title">You have met this ordering before</strong>
+          <p>Listing every node so that parents always come before children is a <button class="gloss" type="button" popovertarget="g-toposort">topological sort</button><span class="gloss-def" popover id="g-toposort">Arranging items so that everything a step depends on comes before it. Build systems, spreadsheet recalculation and task schedulers all run on the same idea.</span> — the same algorithm a build system uses to decide what to compile first. Recognising it here means recognising it everywhere.</p>
+        </div>
+      </div>
+
+      <div class="trace u-reveal" data-u="trace" data-u-steps='[
+        {"at":"d","say":"Calling backward on d first lists every ancestor in dependency order."},
+        {"at":"d","say":"Seed the walk: d gets a gradient of 1, because nudging d moves d one for one."},
+        {"at":"add","from":"d","to":"add","say":"The + node fires. Addition splits credit evenly, so both parents receive the gradient unchanged."},
+        {"at":"mul","from":"add","to":"mul","say":"The * node fires. Multiplication swaps: each parent is scaled by what the other one held."},
+        {"at":"a","from":"mul","to":"a","say":"a ends up with 2.0 and b with 4.0. Every input now knows exactly how much it mattered."}
+      ]'>
+        <div class="trace__nodes">
+          <div class="trace__node" data-u-node="a" data-lit="false"><span class="trace__glyph">a</span><span>a.grad = 2.0</span></div>
+          <div class="trace__node" data-u-node="mul" data-lit="false"><span class="trace__glyph">×</span><span>the * node</span></div>
+          <div class="trace__node" data-u-node="add" data-lit="false"><span class="trace__glyph">+</span><span>the + node</span></div>
+          <div class="trace__node" data-u-node="d" data-lit="false"><span class="trace__glyph">d</span><span>d.grad = 1</span></div>
+        </div>
+        <div class="trace__pulse" data-u-pulse aria-hidden="true"></div>
+        <p class="trace__caption" data-u-caption data-u-idle="The same expression as chapter one, running in reverse.">The same expression as chapter one, running in reverse.</p>
+        <div class="trace__controls">
+          <button class="btn btn--primary" type="button" data-u-next>Next step</button>
+          <button class="btn" type="button" data-u-restart>Restart</button>
+          <span class="trace__count" data-u-count></span>
+        </div>
+        <ol class="trace__script">
+          <li>The final node is seeded with a gradient of 1.</li>
+          <li>Addition passes its gradient to both parents unchanged.</li>
+          <li>Multiplication scales each parent by what the other held.</li>
+          <li>The inputs end up holding how much each of them mattered.</li>
+        </ol>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One character that is easy to miss</h2>
+        <p>Every note-to-self in engine.py adds to the gradient with <code>+=</code>, never <code>=</code>. It looks like a style choice. It is not.</p>
+      </section>
+
+      <div class="cards u-reveal">
+        <div class="card"><span class="card__glyph" aria-hidden="true">➕</span><h3 class="card__title">Why it adds</h3><p>A number used in two places earns credit from both. Assigning would let the second contribution quietly erase the first.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🧹</span><h3 class="card__title">Why wiping matters</h3><p>Because gradients accumulate, they have to be cleared before every training step, or this round's blame lands on top of last round's.</p></div>
+        <div class="card"><span class="card__glyph" aria-hidden="true">🔁</span><h3 class="card__title">Same trap in PyTorch</h3><p>Real training loops call zero_grad for exactly this reason. Same trap, same fix, four orders of magnitude more code.</p></div>
+      </div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">The ordering guarantees each note-to-self fires exactly once, only after all of its incoming credit has arrived.</p>
+        <details class="depth__more">
+          <summary>Where it gets subtle</summary>
+          <div class="depth__body">
+            <p>The subtlety is a number used twice. In <code>a + a</code>, both parents of the sum are the same object, so its note adds to <code>a.grad</code> twice — which is the correct calculus, and only works because the notes accumulate with <code>+=</code> onto a node that fires after all paths have reported. Replace <code>+=</code> with <code>=</code> and the second path silently erases the first. The fieldwork below lets you catch this with your own eyes.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="fieldwork u-reveal">
+        <div class="fieldwork__head">
+          <span class="fieldwork__label">Fieldwork</span>
+          <span class="fieldwork__time">~4 minutes, read-only</span>
+        </div>
+        <div class="fieldwork__body">
+          <div class="fieldwork__step"><span class="fieldwork__verb">Open</span><p><code>micrograd/engine.py</code> and reread <code>__add__</code>, lines 13-22.</p></div>
+          <div class="fieldwork__step"><span class="fieldwork__verb">Predict</span><p>Someone writes <code>b = a + a</code>, then <code>b.backward()</code>. Write down the final value of <code>a.grad</code> — and which exact lines produce it.</p></div>
+          <details class="fieldwork__check">
+            <summary>Check your prediction</summary>
+            <div class="fieldwork__answer">
+              <p><code>a.grad</code> ends at <strong>2</strong>. Both <code>self</code> and <code>other</code> are the same object, so lines 18 and 19 — <code>self.grad += out.grad</code> and <code>other.grad += out.grad</code> — add 1 to the same number twice. If you predicted 1, you have just met the exact bug that <code>=</code> instead of <code>+=</code> would create, and you will never write it.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Powers accept plain numbers only, never another Value</h3>
+          <span class="tradeoff__src">micrograd/engine.py, line 36 — "only supporting int/float powers for now"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>An <code>assert</code> that refuses a Value exponent, with the reason written into the error message itself.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>General <code>x ** y</code> where both vary — which would drag logarithms into the gradient rule for a case the library never needs.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>Division works only because it is rewritten as <code>x * other**-1</code>; anything fancier with exponents is simply out of bounds.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>The message says "for now" — the boundary is explicitly provisional, waiting for a need that teaching has never had.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">A newcomer reading backward() closely</p>
+        <blockquote class="defend__q">Why does the walk start with <code>self.grad = 1</code>? That looks like an arbitrary magic number smuggled into the maths.</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>It is the one gradient you get for free: the question every gradient answers is "if this number moves, how much does the <em>final</em> number move?" — and the final number moves one-for-one with itself. Every other gradient in the graph is manufactured from that seed by the chain rule, each note multiplying or passing it backwards. Change the seed to 2 and every gradient in the network doubles, which is exactly why 1 is the only honest start.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "it is just a convention". The follow-up — <em>what would happen with 0?</em> — has a concrete answer (every gradient becomes 0 and nothing learns), which proves the value is doing real work.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="b"
+             data-u-if-right="The ordering guarantees a node has collected all its incoming credit before it passes any on. Fire them in creation order and nodes push half-finished numbers downstream."
+             data-u-if-wrong="The ordering is not about speed or tidiness. Think about a node that receives credit along two different paths, firing before the second path has arrived.">
+          <h3 class="check__ask">An assistant offers to simplify the backward pass by dropping the ordering step and looping over nodes in the order they were created. What goes wrong?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">Nothing — creation order and dependency order are always the same</button>
+            <button class="check__opt" type="button" data-u-answer="b">Nodes fire before all their credit has arrived, so gradients come out quietly wrong — no crash, just a network that never quite learns</button>
+            <button class="check__opt" type="button" data-u-answer="c">It raises an infinite recursion error</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="That shape — fine for a few steps, then chaos, with nothing in the logs — is the signature of stale gradients piling up. Recognising it saves hours."
+             data-u-if-wrong="Picture a gradient that is added to and never reset. After ten steps it holds roughly ten steps of blame, and the update overshoots wildly.">
+          <h3 class="check__ask">You forget to wipe the gradients in your training loop. What do you actually see?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">A crash on the second iteration</button>
+            <button class="check__opt" type="button" data-u-answer="b">Predictions frozen at their starting values forever</button>
+            <button class="check__opt" type="button" data-u-answer="c">A few good steps, then the error explodes or stalls — with no error message anywhere</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>

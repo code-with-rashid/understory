@@ -1,0 +1,172 @@
+<section class="chapter" id="ch-2" data-u-short="The cast">
+  <div class="chapter__inner">
+    <header class="u-reveal">
+      <span class="chapter__eyebrow">Chapter 02</span>
+      <h1 class="chapter__title">Meet the cast</h1>
+      <p class="chapter__lede">Four characters, each one built out of the one below it.</p>
+    </header>
+
+    <div class="chapter__body">
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">Nesting dolls, not an org chart</h2>
+        <p>In most software the parts sit beside each other and send messages. Here they sit <em>inside</em> each other, like nesting dolls.</p>
+        <p>Open the network and you find layers. Open a layer and you find neurons. Open a neuron and it is Values all the way down.</p>
+      </section>
+
+      <div class="map u-reveal" data-u="map">
+        <div class="map__zone">
+          <span class="map__zone-name">nn.py — the network</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="MLP: the whole network. Holds a list of layers and pushes your input through each one in turn. This is the object you actually call."><span class="map__glyph" aria-hidden="true">🧠</span><span>MLP</span></button>
+            <button class="map__part" type="button" data-u-part="Layer: a row of neurons that all read the same input. Its only job is to call each neuron and collect the answers."><span class="map__glyph" aria-hidden="true">📚</span><span>Layer</span></button>
+            <button class="map__part" type="button" data-u-part="Neuron: holds one weight per input, plus a bias. Multiplies, sums, and optionally flattens the negative half away."><span class="map__glyph" aria-hidden="true">⚫</span><span>Neuron</span></button>
+          </div>
+        </div>
+        <div class="map__zone">
+          <span class="map__zone-name">engine.py — the arithmetic</span>
+          <div class="map__parts">
+            <button class="map__part" type="button" data-u-part="Value: one number, its gradient, its parents, and the note explaining how to pass credit back to those parents. Everything above is made of these."><span class="map__glyph" aria-hidden="true">🔢</span><span>Value</span></button>
+            <button class="map__part" type="button" data-u-part="Module: a two-method base class. It gives the other three a shared list of parameters and a way to wipe every gradient back to zero."><span class="map__glyph" aria-hidden="true">🧩</span><span>Module</span></button>
+          </div>
+        </div>
+        <p class="map__readout" data-u-readout role="status" aria-live="polite">Pick a piece to see what it is responsible for.</p>
+      </div>
+
+      <section class="beat u-reveal">
+        <h2 class="beat__head">One neuron, in full</h2>
+        <p>A neuron sounds mystical. It is four lines of arithmetic and one decision.</p>
+      </section>
+
+      <div class="annotated u-reveal">
+        <div class="annotated__pane annotated__pane--code">
+          <span class="annotated__label">Code</span>
+          <span class="annotated__file">micrograd/nn.py, lines 15-22</span>
+          <pre><code><span class="cl">    <span class="t-key">def</span> <span class="t-fn">__init__</span>(self, nin, nonlin=<span class="t-key">True</span>):</span>
+<span class="cl">        self.w = [<span class="t-fn">Value</span>(random.<span class="t-fn">uniform</span>(<span class="t-num">-1</span>,<span class="t-num">1</span>)) <span class="t-key">for</span> _ <span class="t-key">in</span> <span class="t-fn">range</span>(nin)]</span>
+<span class="cl">        self.b = <span class="t-fn">Value</span>(<span class="t-num">0</span>)</span>
+<span class="cl">        self.nonlin = nonlin</span>
+<span class="cl"></span>
+<span class="cl">    <span class="t-key">def</span> <span class="t-fn">__call__</span>(self, x):</span>
+<span class="cl">        act = <span class="t-fn">sum</span>((wi*xi <span class="t-key">for</span> wi,xi <span class="t-key">in</span> <span class="t-fn">zip</span>(self.w, x)), self.b)</span>
+<span class="cl">        <span class="t-key">return</span> act.<span class="t-fn">relu</span>() <span class="t-key">if</span> self.nonlin <span class="t-key">else</span> act</span></code></pre>
+        </div>
+        <div class="annotated__pane annotated__pane--notes">
+          <span class="annotated__label">In plain English</span>
+          <ol>
+            <li>Set up a neuron that expects a certain number of inputs.</li>
+            <li>Give it one <button class="gloss" type="button" popovertarget="g-weight">weight</button><span class="gloss-def" popover id="g-weight">A dial controlling how much one input matters to this neuron. Training is nothing more than turning these dials a little at a time.</span> per input, each starting somewhere random between -1 and 1. Random, because identical starting dials would make every neuron learn the identical thing.</li>
+            <li>Add a <button class="gloss" type="button" popovertarget="g-bias">bias</button><span class="gloss-def" popover id="g-bias">A constant the neuron adds no matter what the inputs are. It shifts the threshold, letting the neuron fire more or less eagerly.</span> starting at zero — its opinion before it has seen anything.</li>
+            <li>Remember whether this neuron should flatten its output or pass it through raw.</li>
+            <li>This is what runs when you treat the neuron like a function and write <code>n(x)</code>.</li>
+            <li>Pair each input with its weight, multiply, and total them up — starting the running total <em>at the bias</em> rather than at zero. That detail is why the bias needs no line of its own.</li>
+            <li>Optionally pass the result through <button class="gloss" type="button" popovertarget="g-relu">ReLU</button><span class="gloss-def" popover id="g-relu">A rule that says: if the number is negative, make it zero; otherwise leave it alone. That single kink is what lets stacked layers learn curved patterns instead of only straight lines.</span>. Without that kink, stacking a hundred layers would still only ever draw a straight line.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="match u-reveal" data-u="match">
+        <div class="match__chips">
+          <button class="match__chip" type="button" data-u-chip="value">Value</button>
+          <button class="match__chip" type="button" data-u-chip="neuron">Neuron</button>
+          <button class="match__chip" type="button" data-u-chip="layer">Layer</button>
+          <button class="match__chip" type="button" data-u-chip="mlp">MLP</button>
+        </div>
+        <div class="match__slots">
+          <div class="match__row">
+            <p class="match__prompt">Remembers one number, who made it, and how to pass credit back</p>
+            <button class="match__slot" type="button" data-u-slot="value" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Weighs each input, totals them with a bias, optionally clips at zero</p>
+            <button class="match__slot" type="button" data-u-slot="neuron" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Runs a row of those on the same input and collects the answers</p>
+            <button class="match__slot" type="button" data-u-slot="layer" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+          <div class="match__row">
+            <p class="match__prompt">Feeds the output of one stage into the next, front to back</p>
+            <button class="match__slot" type="button" data-u-slot="mlp" data-u-empty="Drop or tap here">Drop or tap here</button>
+          </div>
+        </div>
+        <p class="match__result" data-u-result role="status" aria-live="polite"></p>
+        <div class="match__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check matches</button>
+          <button class="btn" type="button" data-u-again>Reset</button>
+        </div>
+      </div>
+
+      <div class="figure" data-figure="composition"></div>
+
+      <div class="depth u-reveal">
+        <p class="depth__short">One call — <code>model.parameters()</code> — reaches every trainable number in the network, because each level asks the level below.</p>
+        <details class="depth__more">
+          <summary>How it actually works</summary>
+          <div class="depth__body">
+            <p>The base class Module defines <code>parameters()</code> returning an empty list, and <code>zero_grad()</code> that loops over whatever <code>parameters()</code> yields. Neuron overrides it with its weights plus bias; Layer concatenates its neurons' lists; MLP concatenates its layers'. Nothing keeps a registry — the list is rebuilt by recursion every call, which is why nothing can ever be stale.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="tradeoff u-reveal">
+        <div class="tradeoff__head">
+          <span class="tradeoff__label">Decision</span>
+          <h3 class="tradeoff__title">Copy PyTorch&#8217;s API shape instead of inventing one</h3>
+          <span class="tradeoff__src">README.md — "a small neural networks library… with a PyTorch-like API"</span>
+        </div>
+        <div class="tradeoff__grid">
+          <div class="tradeoff__cell tradeoff__cell--kept"><h4>What was chosen</h4><p>The idioms learners will meet next: <code>model(x)</code>, <code>parameters()</code>, <code>zero_grad()</code>, <code>backward()</code>.</p></div>
+          <div class="tradeoff__cell tradeoff__cell--dropped"><h4>What was rejected</h4><p>A cleaner bespoke interface that might avoid PyTorch&#8217;s sharp edges.</p></div>
+          <div class="tradeoff__cell"><h4>What it costs</h4><p>It inherits the footguns too — chief among them that forgetting <code>zero_grad()</code> fails silently, exactly as it does in the real thing.</p></div>
+          <div class="tradeoff__cell"><h4>Revisit it when</h4><p>Never for this library: transferring to PyTorch is the goal, so matching its shape is the feature.</p></div>
+        </div>
+      </div>
+
+      <div class="defend u-reveal">
+        <p class="defend__who">Someone who values reproducibility</p>
+        <blockquote class="defend__q">Weights start at <code>random.uniform(-1,1)</code>, so every run gives different results. Zeros would be reproducible — why is randomness the default?</blockquote>
+        <p class="defend__prompt">Answer it in your head first. Then check.</p>
+        <details class="defend__reveal">
+          <summary>How you would answer</summary>
+          <div class="defend__body">
+            <p>Start every weight at the same value and every neuron in a layer computes the same output, receives the same gradient, and takes the same update — they are clones at birth and clones forever, so a hundred-neuron layer learns exactly one thing. Randomness is not decoration; it is what breaks the symmetry so neurons can specialise. Reproducibility is recovered the standard way: seed the generator, keep the randomness.</p>
+            <p class="defend__weak"><strong>What will not survive:</strong> "random just works better in practice". The follow-up is <em>why?</em> — and if you cannot say "identical neurons get identical gradients", you have a superstition, not an answer.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="check u-reveal" data-u="check">
+        <div class="check__q" data-u-question data-u-correct="a"
+             data-u-if-right="Each level asks the level below and passes the list up, so one call on the network reaches every dial in it. That pattern has a name worth knowing: recursion over a tree."
+             data-u-if-wrong="Look at what the network does when asked for its parameters — it loops over its layers and asks each of them the same question.">
+          <h3 class="check__ask">You want to know how many trainable numbers your network has. Where does that come from?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a"><code>len(model.parameters())</code> — each level asks the level below</button>
+            <button class="check__opt" type="button" data-u-answer="b">You work it out by hand from the layer sizes</button>
+            <button class="check__opt" type="button" data-u-answer="c">A global counter inside Value tracks every one ever made</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__q" data-u-question data-u-correct="c"
+             data-u-if-right="The network switches ReLU off for its last layer on purpose. A flattened output could never be negative, and a final score often needs to be."
+             data-u-if-wrong="Something about the last layer is deliberately different from the others. Ask what flattening the negative half would do to a final answer that is allowed to go below zero.">
+          <h3 class="check__ask">You add a layer at the end of a network and suddenly its predictions can never go below zero. What did you miss?</h3>
+          <div class="check__opts" role="group" aria-label="Answers">
+            <button class="check__opt" type="button" data-u-answer="a">The new layer needs more neurons</button>
+            <button class="check__opt" type="button" data-u-answer="b">The biases should have started random, not at zero</button>
+            <button class="check__opt" type="button" data-u-answer="c">The final layer is meant to be linear — ReLU is switched off there deliberately</button>
+          </div>
+          <p class="check__result" data-u-result role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="check__actions">
+          <button class="btn btn--primary" type="button" data-u-mark>Check answers</button>
+          <button class="btn" type="button" data-u-again>Try again</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>

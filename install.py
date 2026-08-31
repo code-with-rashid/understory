@@ -19,7 +19,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SKIP = {".git", ".DS_Store", "__pycache__", "test", "examples", "docs"}
+PKG = HERE / "skills" / "understory"
+SKIP = {".DS_Store", "__pycache__"}
 
 
 def install_skill() -> None:
@@ -27,7 +28,7 @@ def install_skill() -> None:
                                Path.home() / ".claude" / "skills")) / "understory"
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(HERE, dest, ignore=lambda d, names: [n for n in names if n in SKIP])
+    shutil.copytree(PKG, dest, ignore=lambda d, names: [n for n in names if n in SKIP])
     print(f"installed to {dest}")
     print("read by any agent that supports the Agent Skills standard")
 
@@ -35,7 +36,7 @@ def install_skill() -> None:
 def install_file(src: str, dest: str) -> None:
     target = Path.cwd() / dest
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(HERE / "adapters" / src, target)
+    shutil.copy2(PKG / "adapters" / src, target)
     print(f"wrote {target} (the toolkit itself stays at {HERE})")
 
 

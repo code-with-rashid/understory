@@ -14,22 +14,22 @@ case "$TARGET" in
     DEST="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}/understory"
     mkdir -p "$(dirname "$DEST")"
     rm -rf "$DEST"
-    cp -R "$HERE" "$DEST"
-    rm -rf "$DEST/.git" "$DEST/test" "$DEST/examples"
+    cp -R "$HERE/skills/understory" "$DEST"
+    rm -rf "$DEST/__pycache__"
     echo "installed to $DEST"
     ;;
   cursor)
     mkdir -p .cursor/rules
-    cp "$HERE/adapters/cursor-rule.mdc" .cursor/rules/understory.mdc
+    cp "$HERE/skills/understory/adapters/cursor-rule.mdc" .cursor/rules/understory.mdc
     echo "wrote .cursor/rules/understory.mdc (the toolkit still lives at $HERE)"
     ;;
   agents)
-    cp "$HERE/adapters/AGENTS.md" ./AGENTS.md
+    cp "$HERE/skills/understory/adapters/AGENTS.md" ./AGENTS.md
     echo "wrote ./AGENTS.md"
     ;;
   copilot)
     mkdir -p .github
-    cp "$HERE/adapters/copilot-instructions.md" .github/copilot-instructions.md
+    cp "$HERE/skills/understory/adapters/copilot-instructions.md" .github/copilot-instructions.md
     echo "wrote .github/copilot-instructions.md"
     ;;
   *)

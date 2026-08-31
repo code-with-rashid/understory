@@ -47,7 +47,7 @@ Then ask your agent: *"turn ./my-project into a course."*
 By hand, or from an agent with only a shell:
 
 ```bash
-python3 toolkit/scaffold.py init "How X Works" --palette pine \
+python3 skills/understory/toolkit/scaffold.py init "How X Works" --palette pine \
         --source ../x --root ./x-course
 cd x-course
 python3 scaffold.py chapter 1 what-it-does --parts beat,rows,annotated,trace,check
@@ -93,14 +93,15 @@ readable with JavaScript switched off.
 ## Layout
 
 ```
-INSTRUCTIONS.md    the whole procedure, harness-neutral
-SKILL.md           Claude Code entry point
-adapters/          AGENTS.md, Cursor rule, Copilot instructions, paste-in prompt
-guides/            writing.md · components.md · pitfalls.md
-toolkit/           course.css · course.js · shell.html
-                   build.py · verify.py · scaffold.py · snippets/
-test/              fixture + in-page harness + runner
-examples/          a course built from karpathy/micrograd
+skills/understory/   the Agent Skills package (what installers copy)
+  SKILL.md           entry point — read natively by 25+ agent tools
+  INSTRUCTIONS.md    the whole procedure, harness-neutral
+  guides/            writing.md · components.md · pitfalls.md
+  adapters/          AGENTS.md, Cursor rule, Copilot instructions, paste-in prompt
+  toolkit/           course.css · course.js · shell.html
+                     build.py · verify.py · scaffold.py · figures.py · snippets/
+test/                fixture + in-page harness + runner + spec validator
+examples/            a course built from karpathy/micrograd
 ```
 
 ## Portability

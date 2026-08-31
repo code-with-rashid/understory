@@ -11,7 +11,8 @@ import re
 import sys
 from pathlib import Path
 
-root = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent)
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else \
+    Path(__file__).resolve().parent.parent / "skills" / "understory"
 problems: list[str] = []
 
 skill = root / "SKILL.md"

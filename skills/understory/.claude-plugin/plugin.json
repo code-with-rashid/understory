@@ -1,0 +1,9 @@
+{
+  "name": "understory",
+  "description": "Turns a codebase into an interactive HTML course the reader can actually defend — territory-mapped, self-verifying, with fieldwork in the real repo and spaced recall.",
+  "version": "1.3.0",
+  "license": "MIT",
+  "author": { "name": "Rashid Mahmood" },
+  "homepage": "https://github.com/code-with-rashid/understory",
+  "keywords": ["onboarding", "code-comprehension", "course", "teaching", "html"]
+}

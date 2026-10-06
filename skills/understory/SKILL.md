@@ -4,7 +4,7 @@ description: "Turn a codebase into an interactive single-page HTML course that t
 license: MIT
 compatibility: Requires Python 3.9+ and a POSIX shell or equivalent; the optional engine test suite uses a local Chrome or Chromium.
 metadata:
-  version: "1.2"
+  version: "1.3"
   author: rashidmahmood
 ---
 

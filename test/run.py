@@ -158,4 +158,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):  # survive legacy Windows code pages
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     raise SystemExit(main())

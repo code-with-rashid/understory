@@ -27,14 +27,25 @@ precisely enough to get it.
 
 `SKILL.md` is an [open standard](https://agentskills.io/specification) read by
 25+ agents — Claude Code, Codex, Cursor, Gemini CLI, Copilot, Goose and others.
-One install serves all of them:
+In Claude Code, install it as a plugin from the
+[catalog](https://github.com/code-with-rashid/agent-skills):
 
-```bash
-git clone <this repo> understory
-cd understory && python3 install.py      # cross-platform; install.sh also works
+```
+/plugin marketplace add code-with-rashid/agent-skills
+/plugin install understory@codewithrashid-skills
 ```
 
-For tools that only read a plain instructions file:
+Anywhere else, clone and copy the skill folder into your tool's skills directory:
+
+```bash
+git clone https://github.com/code-with-rashid/understory.git
+cd understory
+python3 install.py claude     # ~/.claude/skills  (Claude Code, Cursor, Copilot)
+python3 install.py skills     # ~/.agents/skills  (Codex CLI, Gemini CLI, Cursor, Copilot)
+```
+
+`install.sh` takes the same targets. For tools that only read a plain
+instructions file (these refuse to overwrite an existing file unless you add `--force`):
 
 ```bash
 python3 install.py agents     # ./AGENTS.md

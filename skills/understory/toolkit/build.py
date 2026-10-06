@@ -203,4 +203,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy code page that cannot encode the
+    # check marks and dashes in our output; never let printing crash a run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     raise SystemExit(main())
